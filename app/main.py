@@ -1,8 +1,8 @@
 """
-FastAPI entrypoint — Chatbot Gành Đá Đĩa
-  /          → Chat UI (người dùng)
-  /admin/ui  → Admin UI (quản trị viên)
-  /admin/*   → Admin API endpoints
+FastAPI entrypoint — Chatbot Gành Đá Đĩa v2.0
+  /         → Chat UI
+  /admin/ui → Admin UI
+  /admin/*  → Admin API endpoints
 """
 
 import time
@@ -17,26 +17,24 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from pymongo import MongoClient
 
-from app.rag.chain import chat
+from app.rag.pipeline import rag_chat
 from app.core.config import settings
 from app.api.admin import router as admin_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-MONGO_URI          = settings.MONGO_URI
-DB_NAME            = settings.MONGO_DB_NAME
-COLLECTION_HISTORY = settings.COLLECTION_CHAT_HISTORY
+# ── App ────────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
-    title="Chatbot Gành Đá Đĩa",
-    version="1.0.0",
-    description="Hệ thống chatbot RAG trả lời câu hỏi về Gành Đá Đĩa, Phú Yên",
+    title=settings.APP_TITLE,
+    version=settings.APP_VERSION,
+    description="Hệ thống RAG Chatbot về Gành Đá Đĩa, Phú Yên. Powered by LangChain + MongoDB + Ollama.",
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -44,7 +42,7 @@ app.add_middleware(
 app.include_router(admin_router)
 
 
-# ── Schemas ───────────────────────────────────────────────────────────────────
+# ── Schemas ────────────────────────────────────────────────────────────────────
 
 class ChatRequest(BaseModel):
     message: str
@@ -55,30 +53,33 @@ class ChatResponse(BaseModel):
     session_id: str
     answer: str
     sources: list[dict]
+    query_vector_preview: list[float]
+    query_vector_dim: int
+    search_time_ms: float
+    cached: bool
     response_time_ms: float
 
 
-# ── MongoDB helpers ───────────────────────────────────────────────────────────
+# ── MongoDB helpers ────────────────────────────────────────────────────────────
 
-def get_collection():
-    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
-    return client[DB_NAME][COLLECTION_HISTORY]
+def _get_history_col():
+    client = MongoClient(settings.MONGO_URI, serverSelectionTimeoutMS=3000)
+    return client[settings.MONGO_DB_NAME][settings.COLLECTION_CHAT_HISTORY]
 
 
 def load_history(session_id: str) -> list[dict]:
     try:
-        col = get_collection()
-        session = col.find_one({"session_id": session_id})
-        if session:
-            return session.get("messages", [])
+        col = _get_history_col()
+        doc = col.find_one({"session_id": session_id})
+        return doc.get("messages", []) if doc else []
     except Exception as e:
         logger.warning(f"Không load được history: {e}")
-    return []
+        return []
 
 
 def save_history(session_id: str, messages: list[dict]):
     try:
-        col = get_collection()
+        col = _get_history_col()
         col.update_one(
             {"session_id": session_id},
             {
@@ -95,45 +96,60 @@ def save_history(session_id: str, messages: list[dict]):
         logger.warning(f"Không lưu được history: {e}")
 
 
-# ── Chat API ──────────────────────────────────────────────────────────────────
+# ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @app.get("/health")
 def health():
+    """Kiểm tra trạng thái các service."""
     try:
-        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
+        client = MongoClient(settings.MONGO_URI, serverSelectionTimeoutMS=2000)
         client.admin.command("ping")
-        mongo_status = "ok"
+        mongo_ok = True
+        total_chunks = client[settings.MONGO_DB_NAME][settings.COLLECTION_DOCUMENTS].count_documents({})
+        total_files = client[settings.MONGO_DB_NAME][settings.COLLECTION_UPLOADED_FILES].count_documents({})
     except Exception:
-        mongo_status = "error"
+        mongo_ok = False
+        total_chunks = 0
+        total_files = 0
+
     return {
         "status": "ok",
-        "mongodb": mongo_status,
+        "mongodb": "ok" if mongo_ok else "error",
+        "total_chunks": total_chunks,
+        "total_files": total_files,
+        "llm_model": settings.OLLAMA_LLM_MODEL,
+        "embed_model": settings.OLLAMA_EMBED_MODEL,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
 @app.post("/chat", response_model=ChatResponse)
 def chat_endpoint(req: ChatRequest):
+    """Endpoint chat chính — RAG với LangChain."""
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="Câu hỏi không được để trống.")
 
     session_id = req.session_id or str(uuid.uuid4())
-    history    = load_history(session_id)
+    history = load_history(session_id)
 
-    start  = time.time()
-    result = chat(query=req.message, history=history)
+    start = time.time()
+    result = rag_chat(query=req.message, history=history)
     elapsed_ms = round((time.time() - start) * 1000, 1)
 
-    history.append({"role": "user",      "content": req.message})
+    history.append({"role": "user", "content": req.message})
     history.append({"role": "assistant", "content": result["answer"]})
     save_history(session_id, history)
 
-    logger.info(f"✅ [{session_id[:8]}] '{req.message[:40]}' → {elapsed_ms}ms")
+    logger.info(f"✅ [{session_id[:8]}] '{req.message[:40]}' → {elapsed_ms}ms (cached={result['cached']})")
 
     return ChatResponse(
         session_id=session_id,
         answer=result["answer"],
         sources=result["sources"],
+        query_vector_preview=result["query_vector"],
+        query_vector_dim=result["query_vector_dim"],
+        search_time_ms=result["search_time_ms"],
+        cached=result["cached"],
         response_time_ms=elapsed_ms,
     )
 
@@ -147,18 +163,17 @@ def get_history(session_id: str):
 @app.delete("/history/{session_id}")
 def delete_history(session_id: str):
     try:
-        col = get_collection()
+        col = _get_history_col()
         col.delete_one({"session_id": session_id})
         return {"message": f"Đã xóa lịch sử session {session_id}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── HTML pages ────────────────────────────────────────────────────────────────
+# ── HTML pages ─────────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
 def chat_page():
-    """Trang Chat — người dùng."""
     p = Path(__file__).parent.parent / "static" / "chat.html"
     return p.read_text(encoding="utf-8") if p.exists() else HTMLResponse(
         "<h2>Chưa có chat.html — tạo file static/chat.html</h2>"
@@ -167,7 +182,6 @@ def chat_page():
 
 @app.get("/admin/ui", response_class=HTMLResponse)
 def admin_ui_page():
-    """Trang Admin — quản trị viên."""
     p = Path(__file__).parent.parent / "static" / "admin.html"
     return p.read_text(encoding="utf-8") if p.exists() else HTMLResponse(
         "<h2>Chưa có admin.html — tạo file static/admin.html</h2>"

@@ -11,22 +11,27 @@ class Settings(BaseSettings):
     MONGO_DB_NAME: str = "ganh_da_dia_bot"
     COLLECTION_DOCUMENTS: str = "documents"
     COLLECTION_CHAT_HISTORY: str = "chat_history"
+    COLLECTION_UPLOADED_FILES: str = "uploaded_files"
+    COLLECTION_VECTOR_CACHE: str = "vector_search_cache"
 
     # Ollama
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_LLM_MODEL: str = "llama3.2"
+    OLLAMA_LLM_MODEL: str = "llama3.2:1b"   # Nhỏ hơn, nhanh hơn 3x cho demo
     OLLAMA_EMBED_MODEL: str = "nomic-embed-text"
 
+    # MongoDB Vector Search Index name
+    VECTOR_INDEX_NAME: str = "vector_index"
+
     # RAG
-    CHUNK_SIZE: int = 500
-    CHUNK_OVERLAP: int = 50
+    CHUNK_SIZE: int = 800
+    CHUNK_OVERLAP: int = 100
     TOP_K_RESULTS: int = 5
     EMBEDDING_DIM: int = 768          # nomic-embed-text output dimension
 
     # API
     APP_TITLE: str = "Chatbot Gành Đá Đĩa"
-    APP_VERSION: str = "1.0.0"
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8080"]
+    APP_VERSION: str = "2.0.0"
+    CORS_ORIGINS: list[str] = ["*"]
 
     class Config:
         env_file = ".env"
