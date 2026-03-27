@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Chatbot Gành Đá Đĩa</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh}
+.sidebar{position:fixed;left:0;top:0;width:220px;height:100vh;background:#1a1d27;border-right:1px solid #2d3148;padding:24px 0;display:flex;flex-direction:column}
+.logo{padding:0 20px 24px;border-bottom:1px solid #2d3148;margin-bottom:16px}
+.logo h1{font-size:15px;font-weight:600;color:#7c6af7;letter-spacing:.5px}
+.logo p{font-size:11px;color:#64748b;margin-top:4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;color:#94a3b8;font-size:13px;cursor:pointer;transition:all .2s;border-left:3px solid transparent}
+.nav-item:hover,.nav-item.active{background:#23263a;color:#e2e8f0;border-left-color:#7c6af7}
+.nav-icon{width:16px;height:16px;opacity:.7}
+.main{margin-left:220px;padding:32px}
+.page{display:none}.page.active{display:block}
+.page-title{font-size:20px;font-weight:600;color:#e2e8f0;margin-bottom:6px}
+.page-sub{font-size:13px;color:#64748b;margin-bottom:28px}
+.card{background:#1a1d27;border:1px solid #2d3148;border-radius:12px;padding:24px;margin-bottom:20px}
+.card-title{font-size:13px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;margin-bottom:16px}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.stat-card{background:#1a1d27;border:1px solid #2d3148;border-radius:10px;padding:20px}
+.stat-val{font-size:28px;font-weight:700;color:#7c6af7;line-height:1}
+.stat-label{font-size:12px;color:#64748b;margin-top:6px}
+.upload-zone{border:2px dashed #2d3148;border-radius:10px;padding:48px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
+.upload-zone:hover,.upload-zone.drag{border-color:#7c6af7;background:#1f2235}
+.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upload-icon{width:40px;height:40px;margin:0 auto 12px;background:#23263a;border-radius:10px;display:flex;align-items:center;justify-content:center}
+.upload-icon svg{width:20px;height:20px;stroke:#7c6af7;fill:none}
+.upload-title{font-size:15px;font-weight:500;color:#e2e8f0;margin-bottom:6px}
+.upload-sub{font-size:13px;color:#64748b}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-ready{background:#0f2d1a;color:#34d399;border:1px solid #065f46}
+.badge-processing{background:#1c1c0a;color:#fbbf24;border:1px solid #78350f}
+.badge-failed{background:#2d0a0a;color:#f87171;border:1px solid #7f1d1d}
+.badge-queued{background:#1a1d27;color:#94a3b8;border:1px solid #2d3148}
+.file-table{width:100%;border-collapse:collapse}
+.file-table th{text-align:left;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.6px;padding:10px 12px;border-bottom:1px solid #2d3148}
+.file-table td{padding:12px;border-bottom:1px solid #1e2235;font-size:13px;color:#cbd5e1;vertical-align:middle}
+.file-table tr:last-child td{border-bottom:none}
+.file-table tr:hover td{background:#1f2235}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all .2s}
+.btn-primary{background:#7c6af7;color:#fff}.btn-primary:hover{background:#6d5ce6}
+.btn-danger{background:#2d0a0a;color:#f87171;border:1px solid #7f1d1d}.btn-danger:hover{background:#3d1010}
+.btn-sm{padding:5px 12px;font-size:12px}
+.progress-wrap{margin-top:16px}
+.progress-item{background:#23263a;border:1px solid #2d3148;border-radius:8px;padding:14px 16px;margin-bottom:10px}
+.progress-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.progress-name{font-size:13px;font-weight:500;color:#e2e8f0}
+.progress-pct{font-size:12px;color:#7c6af7;font-weight:600}
+.progress-bar-bg{height:5px;background:#2d3148;border-radius:3px;overflow:hidden}
+.progress-bar-fill{height:100%;background:#7c6af7;border-radius:3px;transition:width .4s ease}
+.progress-status{font-size:11px;color:#64748b;margin-top:6px}
+.empty{text-align:center;padding:40px;color:#64748b;font-size:13px}
+.alert{padding:12px 16px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none}
+.alert-error{background:#2d0a0a;color:#f87171;border:1px solid #7f1d1d}
+.alert-success{background:#0f2d1a;color:#34d399;border:1px solid #065f46}
+.chip{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#23263a;color:#94a3b8}
+.refresh-btn{float:right;background:none;border:1px solid #2d3148;color:#64748b;padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer}
+.refresh-btn:hover{border-color:#7c6af7;color:#7c6af7}
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="logo">
+    <h1>Gành Đá Đĩa</h1>
+    <p>Admin Dashboard</p>
+  </div>
+  <div class="nav-item active" onclick="showPage('upload')">
+    <svg class="nav-icon" viewBox="0 0 24 24" stroke="currentColor" fill="none"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+    Upload tài liệu
+  </div>
+  <div class="nav-item" onclick="showPage('files')">
+    <svg class="nav-icon" viewBox="0 0 24 24" stroke="currentColor" fill="none"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+    Quản lý tài liệu
+  </div>
+  <div class="nav-item" onclick="showPage('stats')">
+    <svg class="nav-icon" viewBox="0 0 24 24" stroke="currentColor" fill="none"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+    Thống kê
+  </div>
+  <div style="margin-top:auto;padding:20px">
+    <a href="/docs" target="_blank" style="font-size:12px;color:#64748b;text-decoration:none">API Docs ↗</a>
+    <br><br>
+    <a href="/" style="font-size:12px;color:#64748b;text-decoration:none">← Chat UI</a>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- ── Trang Upload ── -->
+  <div id="page-upload" class="page active">
+    <div class="page-title">Upload tài liệu</div>
+    <div class="page-sub">Tải lên file txt, pdf hoặc docx để thêm vào cơ sở dữ liệu RAG</div>
+
+    <div id="alert-upload" class="alert"></div>
+
+    <div class="card">
+      <div class="card-title">Chọn file</div>
+      <div class="upload-zone" id="drop-zone">
+        <input type="file" id="file-input" multiple accept=".txt,.pdf,.docx" onchange="handleFiles(this.files)">
+        <div class="upload-icon">
+          <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+        </div>
+        <div class="upload-title">Kéo thả file vào đây hoặc click để chọn</div>
+        <div class="upload-sub">Hỗ trợ: .txt · .pdf · .docx — Tối đa 20MB mỗi file</div>
+      </div>
+    </div>
+
+    <div class="card" id="progress-card" style="display:none">
+      <div class="card-title">Tiến độ xử lý</div>
+      <div class="progress-wrap" id="progress-list"></div>
+    </div>
+  </div>
+
+  <!-- ── Trang Files ── -->
+  <div id="page-files" class="page">
+    <div class="page-title">Quản lý tài liệu</div>
+    <div class="page-sub">Danh sách tất cả file đã upload và trạng thái xử lý</div>
+
+    <div class="card">
+      <button class="refresh-btn" onclick="loadFiles()">↻ Làm mới</button>
+      <div class="card-title">Tài liệu trong hệ thống</div>
+      <div id="alert-files" class="alert"></div>
+      <div id="files-container">
+        <div class="empty">Đang tải...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Trang Stats ── -->
+  <div id="page-stats" class="page">
+    <div class="page-title">Thống kê hệ thống</div>
+    <div class="page-sub">Tổng quan về dữ liệu trong cơ sở dữ liệu RAG</div>
+
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card"><div class="stat-val" id="s-chunks">—</div><div class="stat-label">Tổng chunks</div></div>
+      <div class="stat-card"><div class="stat-val" id="s-files">—</div><div class="stat-label">Tổng files</div></div>
+      <div class="stat-card"><div class="stat-val" id="s-ready">—</div><div class="stat-label">File sẵn sàng</div></div>
+      <div class="stat-card"><div class="stat-val" id="s-fail">—</div><div class="stat-label">File lỗi</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Theo loại file</div>
+      <div id="by-type" style="font-size:13px;color:#94a3b8">Đang tải...</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+const pollers = {};
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.currentTarget.classList.add('active');
+  if (name === 'files') loadFiles();
+  if (name === 'stats') loadStats();
+}
+
+function showAlert(id, msg, type) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = 'alert alert-' + type;
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 5000);
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/1048576).toFixed(1) + ' MB';
+}
+
+function formatDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('vi-VN');
+}
+
+function statusBadge(status) {
+  const map = {
+    ready: ['badge-ready', 'Sẵn sàng'],
+    queued: ['badge-queued', 'Đang chờ'],
+    loading: ['badge-processing', 'Đang tải'],
+    splitting: ['badge-processing', 'Đang tách'],
+    embedding: ['badge-processing', 'Đang embed'],
+    failed: ['badge-failed', 'Lỗi'],
+  };
+  const [cls, label] = map[status] || ['badge-queued', status];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+// ── Drag & Drop ──
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag');
+  handleFiles(e.dataTransfer.files);
+});
+
+async function handleFiles(files) {
+  if (!files || files.length === 0) return;
+  const card = document.getElementById('progress-card');
+  const list = document.getElementById('progress-list');
+  card.style.display = 'block';
+
+  for (const file of files) {
+    const itemId = 'prog-' + Date.now() + Math.random().toString(36).slice(2);
+    list.insertAdjacentHTML('afterbegin', `
+      <div class="progress-item" id="${itemId}">
+        <div class="progress-header">
+          <span class="progress-name">${file.name}</span>
+          <span class="progress-pct" id="${itemId}-pct">0%</span>
+        </div>
+        <div class="progress-bar-bg"><div class="progress-bar-fill" id="${itemId}-bar" style="width:0%"></div></div>
+        <div class="progress-status" id="${itemId}-status">Đang gửi file...</div>
+      </div>
+    `);
+
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`${API}/admin/upload`, { method: 'POST', body: fd });
+      const data = await res.json();
+
+      if (!res.ok) {
+        document.getElementById(itemId + '-status').textContent = '❌ ' + (data.detail || 'Lỗi upload');
+        document.getElementById(itemId + '-bar').style.background = '#f87171';
+        continue;
+      }
+
+      pollProgress(data.file_id, itemId);
+
+    } catch (err) {
+      document.getElementById(itemId + '-status').textContent = '❌ Không kết nối được server';
+    }
+  }
+  // Reset input
+  document.getElementById('file-input').value = '';
+}
+
+function pollProgress(fileId, itemId) {
+  const poll = setInterval(async () => {
+    try {
+      const res = await fetch(`${API}/admin/files/${fileId}`);
+      const data = await res.json();
+      const pct = data.progress_pct || 0;
+      const bar = document.getElementById(itemId + '-bar');
+      const pctEl = document.getElementById(itemId + '-pct');
+      const statusEl = document.getElementById(itemId + '-status');
+
+      if (!bar) { clearInterval(poll); return; }
+
+      bar.style.width = pct + '%';
+      pctEl.textContent = pct + '%';
+
+      const statusMap = {
+        queued: 'Đang chờ xử lý...',
+        loading: 'Đang đọc file...',
+        splitting: 'Đang tách văn bản thành chunks...',
+        embedding: `Đang tạo vector... (${data.chunks_processed}/${data.total_chunks} chunks)`,
+        ready: `Hoàn tất — ${data.total_chunks} chunks`,
+        failed: '❌ Lỗi: ' + (data.error_msg || 'không xác định'),
+      };
+      statusEl.textContent = statusMap[data.status] || data.status;
+
+      if (data.status === 'ready') {
+        bar.style.background = '#34d399';
+        clearInterval(poll);
+      } else if (data.status === 'failed') {
+        bar.style.background = '#f87171';
+        clearInterval(poll);
+      }
+    } catch { clearInterval(poll); }
+  }, 1500);
+}
+
+// ── Files list ──
+async function loadFiles() {
+  const container = document.getElementById('files-container');
+  try {
+    const res = await fetch(`${API}/admin/files`);
+    const data = await res.json();
+    if (data.files.length === 0) {
+      container.innerHTML = '<div class="empty">Chưa có tài liệu nào. Hãy upload file đầu tiên.</div>';
+      return;
+    }
+    container.innerHTML = `
+      <table class="file-table">
+        <thead>
+          <tr>
+            <th>Tên file</th>
+            <th>Loại</th>
+            <th>Kích thước</th>
+            <th>Chunks</th>
+            <th>Trạng thái</th>
+            <th>Ngày upload</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.files.map(f => `
+            <tr>
+              <td>${f.file_name}</td>
+              <td><span class="chip">${f.file_type || '?'}</span></td>
+              <td>${formatSize(f.file_size || 0)}</td>
+              <td>${f.total_chunks || 0}</td>
+              <td>${statusBadge(f.status)}</td>
+              <td>${formatDate(f.uploaded_at)}</td>
+              <td>
+                <button class="btn btn-danger btn-sm" onclick="deleteFile('${f.file_id}','${f.file_name}')">Xóa</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch {
+    container.innerHTML = '<div class="empty">Không kết nối được server.</div>';
+  }
+}
+
+async function deleteFile(fileId, fileName) {
+  if (!confirm(`Xóa file "${fileName}" và toàn bộ ${0} chunks liên quan?`)) return;
+  try {
+    const res = await fetch(`${API}/admin/files/${fileId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (res.ok) {
+      showAlert('alert-files', `✅ ${data.message} (${data.chunks_deleted} chunks đã xóa)`, 'success');
+      loadFiles();
+    } else {
+      showAlert('alert-files', '❌ ' + (data.detail || 'Lỗi xóa'), 'error');
+    }
+  } catch {
+    showAlert('alert-files', '❌ Không kết nối được server', 'error');
+  }
+}
+
+// ── Stats ──
+async function loadStats() {
+  try {
+    const res = await fetch(`${API}/admin/stats`);
+    const d = await res.json();
+    document.getElementById('s-chunks').textContent = d.total_chunks.toLocaleString();
+    document.getElementById('s-files').textContent = d.total_files;
+    document.getElementById('s-ready').textContent = d.ready_files;
+    document.getElementById('s-fail').textContent = d.failed_files;
+    const byType = document.getElementById('by-type');
+    if (Object.keys(d.by_type).length === 0) {
+      byType.textContent = 'Chưa có dữ liệu.';
+    } else {
+      byType.innerHTML = Object.entries(d.by_type)
+        .map(([k,v]) => `<span class="chip" style="margin-right:8px">.${k}: ${v} file</span>`)
+        .join('');
+    }
+  } catch {
+    document.getElementById('by-type').textContent = 'Không kết nối được server.';
+  }
+}
+</script>
+</body>
+</html>

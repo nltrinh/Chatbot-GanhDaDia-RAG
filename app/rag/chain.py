@@ -16,23 +16,30 @@ logger = logging.getLogger(__name__)
 OLLAMA_URL = settings.OLLAMA_BASE_URL
 LLM_MODEL = settings.OLLAMA_LLM_MODEL
 
-SYSTEM_PROMPT = """You are a helpful travel assistant for Ganh Da Dia (Ghềnh Đá Đĩa), Phu Yen, Vietnam.
-Answer questions using ONLY the provided context below.
-Always respond in Vietnamese.
-If the context contains the answer, use it directly and be specific.
-If the context does not contain relevant information, say: "Tôi chưa có thông tin về vấn đề này."
-Never make up or guess information. Be concise and friendly."""
+SYSTEM_PROMPT = """Bạn là trợ lý ảo hỗ trợ thông tin về Gành Đá Đĩa, Phú Yên.
+Bạn sẽ trả lời câu hỏi dựa trên ngữ cảnh (CONTEXT) được cung cấp dưới đây.
+- Trả lời bằng tiếng Việt, thân thiện và chính xác.
+- Nếu ngữ cảnh có thông tin, hãy tổng hợp nội dung quan trọng nhất.
+- Nếu ngữ cảnh mang tính liệt kê (file PDF/docx upload lên), hãy tóm tắt ý chính của tài liệu đó.
+- Nếu không tìm thấy thông tin phù hợp trong ngữ cảnh, hãy nói "Tôi chưa có thông tin chi tiết về vấn đề này trong tài liệu hiện có."
+- Luôn chỉ sử dụng thông tin trong CONTEXT.
+
+CONTEXT:
+{context}
+"""
 
 
 def build_context(chunks: list[dict]) -> str:
-    """Ghép các chunks thành context string."""
-    if not chunks:
-        return "Không tìm thấy thông tin liên quan."
+    """Xây dựng chuỗi ngữ cảnh từ list các chunks."""
     parts = []
     for i, chunk in enumerate(chunks, 1):
-        topic = chunk.get("metadata", {}).get("topic", "")
-        content = chunk.get("content", "")
-        parts.append(f"[{i}] ({topic}): {content}")
+        meta = chunk.get("metadata", {})
+        # Ưu tiên topic, nếu không lấy source/file_name
+        source = meta.get("source") or meta.get("file_name", "Unknown")
+        topic = meta.get("topic", "")
+        header = f"[{i}] ({source})" + (f" - {topic}" if topic else "")
+        content = chunk.get("content", "").strip()
+        parts.append(f"{header}: {content}")
     return "\n\n".join(parts)
 
 
@@ -47,7 +54,7 @@ def build_prompt(query: str, context: str, history: list[dict]) -> str:
     # System
     parts.append(
         f"<|start_header_id|>system<|end_header_id|>\n"
-        f"{SYSTEM_PROMPT}<|eot_id|>"
+        f"{SYSTEM_PROMPT.format(context=context)}<|eot_id|>"
     )
 
     # Lịch sử hội thoại (tối đa 4 lượt gần nhất)
@@ -112,7 +119,7 @@ def chat(query: str, history: list[dict] = None) -> dict:
                     "stop": ["<|eot_id|>", "<|end_of_text|>"],
                 },
             },
-            timeout=300,
+            timeout=1200,
         )
         resp.raise_for_status()
         answer = resp.json()["response"].strip()
