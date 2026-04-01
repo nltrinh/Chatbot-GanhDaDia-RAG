@@ -216,6 +216,14 @@ class SearchRequest(BaseModel):
     top_k: int = 5
 
 
+@router.delete("/cache/clear")
+def clear_vector_cache():
+    """Xóa toàn bộ cache tìm kiếm vector."""
+    db = get_db()
+    result = db[settings.COLLECTION_VECTOR_CACHE].delete_many({})
+    return {"message": "Đã xóa toàn bộ cache tìm kiếm", "deleted_count": result.deleted_count}
+
+
 @router.post("/search")
 def vector_search(req: SearchRequest):
     """

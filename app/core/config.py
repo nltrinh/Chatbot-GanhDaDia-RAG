@@ -23,9 +23,9 @@ class Settings(BaseSettings):
     VECTOR_INDEX_NAME: str = "vector_index"
 
     # RAG
-    CHUNK_SIZE: int = 800
-    CHUNK_OVERLAP: int = 100
-    TOP_K_RESULTS: int = 5
+    CHUNK_SIZE: int = 400
+    CHUNK_OVERLAP: int = 50
+    TOP_K_RESULTS: int = 3
     EMBEDDING_DIM: int = 768          # nomic-embed-text output dimension
 
     # API

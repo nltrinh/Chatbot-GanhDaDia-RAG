@@ -176,7 +176,8 @@ def ingest_file(
             
             # Lưu vào MongoDB
             mongo_doc = {
-                "content": chunk.page_content,
+                "doc_id": doc_id,  # Để thỏa mãn unique index doc_id_1
+                "content":  chunk.page_content,
                 "embedding": vector,
                 "metadata": chunk.metadata,
                 "created_at": datetime.now(timezone.utc),
@@ -205,21 +206,24 @@ def get_query_embedding(query: str) -> list[float]:
 
 def search_vectors(query: str, top_k: int = None) -> dict:
     """
-    Tìm kiếm vector search với cache.
-    Trả về: {query_vector, results, cached, search_time_ms}
+    H\u1ec7 th\u1ed1ng Hybrid Search: K\u1ebft h\u1ee3p Vector Search v\u00e0 Keyword Search d\u00f9ng RRF.
+    Tr\u1ea3 v\u1ec1: {query_vector, results, cached, search_time_ms}
     """
     if top_k is None:
         top_k = settings.TOP_K_RESULTS
 
     client = MongoClient(settings.MONGO_URI)
+    db = client[settings.MONGO_DB_NAME]
+    docs_col = db[settings.COLLECTION_DOCUMENTS]
+    cache_col = db[settings.COLLECTION_VECTOR_CACHE]
     
-    # Kiểm tra cache
-    cache_col = client[settings.MONGO_DB_NAME][settings.COLLECTION_VECTOR_CACHE]
-    query_hash = hashlib.md5(query.encode()).hexdigest()
+    # Chu\u1ea9n h\u00f3a query \u0111\u1ec3 cache chính x\u00e1c
+    query_norm = query.strip().lower()
+    query_hash = hashlib.md5(query_norm.encode()).hexdigest()
     cached = cache_col.find_one({"query_hash": query_hash, "top_k": top_k})
     
     if cached:
-        logger.info(f"⚡ Cache hit: '{query[:40]}'")
+        logger.info(f"\u26a1 Cache hit: '{query[:40]}'")
         client.close()
         return {
             "query_vector": cached["query_vector"],
@@ -228,51 +232,80 @@ def search_vectors(query: str, top_k: int = None) -> dict:
             "search_time_ms": 0,
         }
     
-    # Tạo query embedding
     t0 = time.time()
+    
+    # 1. L\u1ea5y Vector Embedding cho query
     query_vector = get_query_embedding(query)
     
-    # Tìm kiếm trong MongoDB
-    docs_col = client[settings.MONGO_DB_NAME][settings.COLLECTION_DOCUMENTS]
-    pipeline = [
+    # 2. Vector Search (Semantic)
+    vector_results = list(docs_col.aggregate([
         {
             "$vectorSearch": {
                 "index": settings.VECTOR_INDEX_NAME,
                 "path": "embedding",
                 "queryVector": query_vector,
                 "numCandidates": top_k * 10,
-                "limit": top_k,
+                "limit": top_k * 2,
             }
         },
         {
             "$project": {
-                "_id": 0,
-                "content": 1,
-                "metadata": 1,
-                "score": {"$meta": "vectorSearchScore"},
+                "_id": 0, "content": 1, "metadata": 1, 
+                "vector_score": {"$meta": "vectorSearchScore"}
             }
-        },
-    ]
+        }
+    ]))
+
+    # 3. Keyword Search (Full-text) d\u00f9ng $text index
+    keyword_results = list(docs_col.find(
+        {"$text": {"$search": query}},
+        {"_id": 0, "content": 1, "metadata": 1, "score": {"$meta": "textScore"}}
+    ).sort([("score", {"$meta": "textScore"})]).limit(top_k * 2))
+
+    # 4. Reciprocal Rank Fusion (RRF) 
+    # Thu\u1eadt to\u00e1n h\u1ee3p nh\u1ea5t k\u1ebft qu\u1ea3 chuy\u00ean nghi\u1ec7p
+    k_const = 60
+    rrf_scores = {} # doc_id -> score
+    docs_map = {}   # doc_id -> content/metadata
     
-    raw_results = list(docs_col.aggregate(pipeline))
+    # X\u1ebfp h\u1ea1ng t\u1eeb Vector
+    for rank, doc in enumerate(vector_results, 1):
+        doc_id = doc["metadata"].get("doc_id")
+        rrf_scores[doc_id] = rrf_scores.get(doc_id, 0) + (1.0 / (rank + k_const))
+        docs_map[doc_id] = doc
+        docs_map[doc_id]["source_type"] = "vector"
+
+    # X\u1ebfp h\u1ea1ng t\u1eeb Keyword
+    for rank, doc in enumerate(keyword_results, 1):
+        doc_id = doc["metadata"].get("doc_id")
+        rrf_scores[doc_id] = rrf_scores.get(doc_id, 0) + (1.0 / (rank + k_const))
+        if doc_id not in docs_map:
+            docs_map[doc_id] = doc
+            docs_map[doc_id]["source_type"] = "keyword"
+        else:
+            docs_map[doc_id]["source_type"] = "hybrid"
+
+    # S\u1eafp h\u1ea1ng l\u1ea1i v\u00e0 l\u1ea5y Top K
+    sorted_doc_ids = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)[:top_k]
+    
     elapsed_ms = round((time.time() - t0) * 1000, 1)
     
-    # Chuẩn hóa kết quả
-    results = [
-        {
-            "doc_id": r.get("metadata", {}).get("doc_id", ""),
+    results = []
+    for doc_id in sorted_doc_ids:
+        r = docs_map[doc_id]
+        results.append({
+            "doc_id": doc_id,
             "content": r.get("content", ""),
             "content_preview": r.get("content", "")[:200],
             "source": r.get("metadata", {}).get("source", ""),
             "file_name": r.get("metadata", {}).get("file_name", ""),
             "page_num": r.get("metadata", {}).get("page_num", 1),
             "chunk_index": r.get("metadata", {}).get("chunk_index", 0),
-            "score": round(r.get("score", 0), 4),
-        }
-        for r in raw_results
-    ]
+            "score": round(rrf_scores[doc_id], 6),
+            "search_type": r.get("source_type", "unknown")
+        })
     
-    # Lưu vào cache (TTL 1 giờ)
+    # L\u01b0u v\u00e0o cache
     cache_col.insert_one({
         "query_hash": query_hash,
         "query": query,
@@ -283,7 +316,7 @@ def search_vectors(query: str, top_k: int = None) -> dict:
         "created_at": datetime.now(timezone.utc),
     })
     
-    logger.info(f"🔍 Search '{query[:40]}': {len(results)} results in {elapsed_ms}ms")
+    logger.info(f"\ud83d\udd0d Hybrid Search '{query[:40]}': {len(results)} results in {elapsed_ms}ms (RRF)")
     client.close()
     
     return {
@@ -296,18 +329,23 @@ def search_vectors(query: str, top_k: int = None) -> dict:
 
 # ── RAG Chain (LangChain LCEL) ─────────────────────────────────────────────────
 
-PROMPT_TEMPLATE = """Bạn là trợ lý du lịch thông minh chuyên về Gành Đá Đĩa, Phú Yên, Việt Nam.
-Trả lời câu hỏi dựa trên tài liệu tham khảo sau đây. Ghi rõ thông tin bạn sử dụng từ tài liệu nào.
+PROMPT_TEMPLATE = """B\u1ea1n l\u00e0 Tr\u1ee3 l\u00fd AI G\u00e0nh \u0110\u00e1 \u0110\u0129a chuy\u00ean nghi\u1ec7p. Nhi\u1ec7m v\u1ee5 c\u1ee7a b\u1ea1n l\u00e0 tr\u1ea3 l\u1eddi d\u1ef1a TR\u00caN T\u00c0I LI\u1ec6U THAM KH\u1ea2O b\u00ean d\u01b0\u1edbi.
 
-TÀI LIỆU THAM KHẢO:
+\ud83d\udea8 QUY T\u1eaeC NGHI\u00caM NG\u1eb6T:
+1. CH\u1ec0 tr\u1ea3 l\u1eddi n\u1ed9i dung n\u1ebfu th\u1ea5y trong "T\u00c0I LI\u1ec6U THAM KH\u1ea2O". 
+2. N\u1ebfu th\u00f4ng tin KH\u00d4NG c\u00f3, h\u00e3y tr\u1ea3 l\u1eddi: "D\u1ef1a tr\u00ean t\u00e0i li\u1ec7u hi\u1ec7n c\u00f3, t\u00f4i kh\u00f4ng th\u1ea5y th\u00f4ng tin n\u00e0y."
+3. Tuy\u1ec7t \u0111\u1ed1i KH\u00d4NG \u0111\u01b0\u1ee3c t\u1ef1 b\u1ecba ra con s\u1ed0 ho\u1eb7c ng\u00e0y th\u00e1ng.
+4. LU\u00d4N d\u00f9ng k\u00fd hi\u1ec7u [s\u1ed1 th\u1ee9 t\u1ef1 ngu\u1ed3n] ng\u1ay sau th\u00f4ng tin tr\u00edch d\u1eabn.
+
+T\u00c0I LI\u1ec6U THAM KH\u1ea2O:
 {context}
 
-LỊCH SỬ HỘI THOẠI:
+L\u1ecaCH S\u1eec H\u1ed8I THO\u1ea0I:
 {history}
 
-CÂU HỎI: {question}
+C\u00c2U H\u1eceI: {question}
 
-Hãy trả lời chi tiết, chính xác bằng tiếng Việt. Nếu tài liệu không có thông tin, hãy thành thật cho biết."""
+H\u00e3y tr\u1ea3 l\u1eddi ng\u1eafn g\u1ecdn, ch\u00ednh x\u00e1c v\u00e0 l\u1ecbch s\u1ef1:"""
 
 
 def build_context_from_results(results: list[dict]) -> str:

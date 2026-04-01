@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot Gành Đá Đĩa — RAG v2.0</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0b0e14;
+            --sidebar-bg: #11141d;
+            --card-bg: rgba(26, 29, 43, 0.7);
+            --primary: #7c6af7;
+            --primary-glow: rgba(124, 106, 247, 0.4);
+            --text: #e2e8f0;
+            --text-dim: #94a3b8;
+            --border: #23263a;
+            --glass-border: rgba(255, 255, 255, 0.05);
+            --success: #34d399;
+            --warning: #fbbf24;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(124, 106, 247, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(124, 106, 247, 0.05) 0%, transparent 40%);
+        }
+
+        /* ── Sidebar ── */
+        .sidebar {
+            width: 320px;
+            background: var(--sidebar-bg);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            z-index: 10;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 40px;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--primary);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 20px var(--primary-glow);
+        }
+
+        .logo h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 18px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(to right, #fff, var(--primary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .nav { flex: 1; }
+        .nav-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        .history-item {
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 13px;
+            color: var(--text-dim);
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .history-item:hover { background: rgba(255, 255, 255, 0.03); color: #fff; }
+        .history-item.active { background: var(--border); color: #fff; border-left: 3px solid var(--primary); }
+
+        .sidebar-footer {
+            margin-top: auto;
+            border-top: 1px solid var(--border);
+            padding-top: 20px;
+        }
+
+        .btn-admin {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 12px;
+            background: rgba(124, 106, 247, 0.1);
+            border: 1px solid var(--primary);
+            border-radius: 10px;
+            color: var(--primary);
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-admin:hover { background: var(--primary); color: #fff; }
+
+        /* ── Main Chat ── */
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .header {
+            height: 70px;
+            padding: 0 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            background: rgba(11, 14, 20, 0.8);
+            backdrop-filter: blur(10px);
+        }
+
+        .header-title { display: flex; align-items: center; gap: 10px; }
+        .header-title .dot { width: 8px; height: 8px; background: var(--success); border-radius: 50%; box-shadow: 0 0 10px var(--success); }
+        .header-title h2 { font-size: 15px; font-weight: 600; }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .msg-row { display: flex; flex-direction: column; max-width: 85%; }
+        .msg-row.user { align-self: flex-end; align-items: flex-end; }
+        .msg-row.bot { align-self: flex-start; }
+
+        .msg-bubble {
+            padding: 16px 20px;
+            border-radius: 18px;
+            font-size: 14px;
+            line-height: 1.6;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            position: relative;
+        }
+
+        .user .msg-bubble {
+            background: var(--primary);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+
+        .bot .msg-bubble {
+            background: var(--card-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text);
+            border-bottom-left-radius: 4px;
+        }
+
+        /* ── Sources & Metadata ── */
+        .msg-meta {
+            margin-top: 10px;
+            font-size: 11px;
+            color: var(--text-dim);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .meta-tag {
+            background: #1a1d2b;
+            padding: 4px 10px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid var(--border);
+        }
+
+        .tag-icon { width: 12px; height: 12px; opacity: 0.6; }
+
+        .sources-panel {
+            margin-top: 12px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 10px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .source-item {
+            font-size: 12px;
+            padding: 8px;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.02);
+            border-left: 2px solid var(--primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+        .source-item:hover { background: rgba(255,255,255,0.05); }
+        .source-info { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+        .source-name { font-weight: 600; color: #fff; }
+        .source-preview { color: var(--text-dim); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+        .source-score { font-family: monospace; color: var(--success); font-weight: 600; margin-left: 10px; }
+
+        /* ── Vector Preview ── */
+        .vector-visual {
+            margin-top: 12px;
+            background: #000;
+            border-radius: 8px;
+            padding: 10px;
+            display: none;
+        }
+        .vector-visual.active { display: block; }
+        .vector-grid { display: flex; gap: 4px; flex-wrap: wrap; }
+        .vector-cell {
+            width: 14px;
+            height: 14px;
+            border-radius: 2px;
+            transition: transform 0.2s;
+        }
+        .vector-cell:hover { transform: scale(1.3); }
+
+        /* ── Input ── */
+        .input-area {
+            padding: 24px 32px 32px;
+            background: linear-gradient(to top, var(--bg), transparent);
+        }
+
+        .input-box {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.3s;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .input-box:focus-within { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(124, 106, 247, 0.1); }
+
+        .input-box textarea {
+            flex: 1;
+            background: none;
+            border: none;
+            color: #fff;
+            padding: 12px;
+            font-family: inherit;
+            font-size: 15px;
+            resize: none;
+            outline: none;
+            max-height: 120px;
+        }
+
+        .btn-send {
+            width: 44px;
+            height: 44px;
+            background: var(--primary);
+            border: none;
+            border-radius: 12px;
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .btn-send:hover { transform: scale(1.05); }
+        .btn-send:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* ── Loading ── */
+        .typing { display: flex; gap: 4px; padding: 12px 20px; }
+        .typing span { width: 6px; height: 6px; background: var(--text-dim); border-radius: 50%; animation: blink 1.4s infinite both; }
+        .typing span:nth-child(2) { animation-delay: 0.2s; }
+        .typing span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0%, 80%, 100% { opacity: 0; } 40% { opacity: 1; } }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #333; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="logo">
+            <div class="logo-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+            </div>
+            <h1>GÀNH ĐÁ ĐĨA AI</h1>
+        </div>
+
+        <div class="nav">
+            <span class="nav-label">Hội thoại gần đây</span>
+            <div id="history-list">
+                <div class="history-item active">Phiên chat hiện tại</div>
+            </div>
+        </div>
+
+        <div class="sidebar-footer">
+            <a href="/admin/ui" class="btn-admin">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                Quản trị tài liệu
+            </a>
+        </div>
+    </div>
+
+    <div class="chat-container">
+        <div class="header">
+            <div class="header-title">
+                <div class="dot"></div>
+                <h2>LangChain RAG Engine Online</h2>
+            </div>
+            <div style="font-size: 12px; color: var(--text-dim);">
+                V2.1 · MongoDB Vector Search
+            </div>
+        </div>
+
+        <div class="messages" id="chat-messages">
+            <div class="msg-row bot">
+                <div class="msg-bubble">
+                    Xin chào! Tôi là trợ lý ảo Gành Đá Đĩa. Tôi đã được nạp dữ liệu từ các tài liệu bạn upload. Bạn muốn tìm hiểu gì hôm nay?
+                </div>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <div class="input-box">
+                <textarea id="user-input" rows="1" placeholder="Nhập câu hỏi về Gành Đá Đĩa..." oninput="autoExpand(this)"></textarea>
+                <button class="btn-send" id="send-btn" onclick="sendMessage()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Xem Vector v\u00e0 Ngu\u1ed3n -->
+    <div id="details-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:100; align-items:center; justify-content:center; padding:20px;">
+        <div style="background:var(--sidebar-bg); border:1px solid var(--border); border-radius:16px; width:100%; max-width:600px; max-height:80vh; overflow:hidden; display:flex; flex-direction:column;">
+            <div style="padding:20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="font-family:Outfit; font-size:16px;">Chi tiết Chunk & Vector</h3>
+                <span style="cursor:pointer; color:var(--text-dim);" onclick="closeModal()">✕</span>
+            </div>
+            <div style="padding:24px; overflow-y:auto;" id="modal-body"></div>
+        </div>
+    </div>
+
+<script>
+    let sessionId = localStorage.getItem('rag_session_id');
+
+    function autoExpand(el) {
+        el.style.height = 'auto';
+        el.style.height = (el.scrollHeight) + 'px';
+    }
+
+    // Load history on startup
+    window.onload = async () => {
+        if (sessionId) {
+            try {
+                const res = await fetch(`/history/${sessionId}`);
+                const data = await res.json();
+                if (data.messages && data.messages.length > 0) {
+                    // Xóa nhắn chào mặc định nếu có history
+                    document.getElementById('chat-messages').innerHTML = '';
+                    data.messages.forEach(m => {
+                        if (m.role === 'user') appendMessage('user', m.content);
+                        else appendBotMessage({ answer: m.content, sources: [], query_vector_preview: [], query_vector_dim: 0, response_time_ms: 0, search_time_ms: 0, cached: false });
+                    });
+                }
+            } catch (err) {
+                console.error("Lỗi load history:", err);
+            }
+        }
+    };
+
+    async function sendMessage() {
+        const input = document.getElementById('user-input');
+        const btn = document.getElementById('send-btn');
+        const text = input.value.trim();
+        if (!text) return;
+
+        // User message
+        appendMessage('user', text);
+        input.value = '';
+        input.style.height = 'auto';
+        input.disabled = true;
+        btn.disabled = true;
+
+        // Loading
+        const loadingId = appendLoading();
+
+        try {
+            const res = await fetch('/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: text, session_id: sessionId })
+            });
+            const data = await res.json();
+            
+            if (!res.ok) {
+                throw new Error(data.detail || "Lỗi server");
+            }
+
+            sessionId = data.session_id;
+            localStorage.setItem('rag_session_id', sessionId);
+
+            removeLoading(loadingId);
+            appendBotMessage(data);
+
+        } catch (err) {
+            removeLoading(loadingId);
+            appendMessage('bot', `❌ Lỗi: ${err.message}`, true);
+        } finally {
+            input.disabled = false;
+            btn.disabled = false;
+            input.focus();
+        }
+    }
+
+    function appendMessage(role, text, isError = false) {
+        const container = document.getElementById('chat-messages');
+        const row = document.createElement('div');
+        row.className = `msg-row ${role}`;
+        row.innerHTML = `
+            <div class="msg-bubble" style="${isError ? 'color:#f87171' : ''}">
+                ${text.replace(/\n/g, '<br>')}
+            </div>
+        `;
+        container.appendChild(row);
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function appendLoading() {
+        const container = document.getElementById('chat-messages');
+        const id = 'loading-' + Date.now();
+        const row = document.createElement('div');
+        row.className = 'msg-row bot';
+        row.id = id;
+        row.innerHTML = `<div class="msg-bubble typing"><span></span><span></span><span></span></div>`;
+        container.appendChild(row);
+        container.scrollTop = container.scrollHeight;
+        return id;
+    }
+
+    function removeLoading(id) {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+    }
+
+    function appendBotMessage(data) {
+        const container = document.getElementById('chat-messages');
+        const row = document.createElement('div');
+        row.className = 'msg-row bot';
+        
+        let sourcesHtml = '';
+        if (data.sources && data.sources.length > 0) {
+            sourcesHtml = `
+                <div class="sources-panel">
+                    <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Ngu\u1ed3n tr\u00edch d\u1eabn (${data.sources.length})</div>
+                    ${data.sources.map(s => `
+                        <div class="source-item" onclick="viewChunkDetail(${JSON.stringify(s).replace(/"/g, '&quot;')})">
+                            <div class="source-info">
+                                <span class="source-name">${s.source}</span>
+                                <span class="source-preview">${s.content_preview}...</span>
+                            </div>
+                            <span class="source-score">${s.score.toFixed(3)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        const statsHtml = `
+            <div class="msg-meta">
+                <div class="meta-tag">
+                    <svg class="tag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    ${data.response_time_ms}ms
+                </div>
+                <div class="meta-tag">
+                    <svg class="tag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                    Search: ${data.search_time_ms}ms
+                </div>
+                ${data.cached ? '<div class="meta-tag" style="color:var(--success)">⚡ Cached</div>' : ''}
+                <div class="meta-tag" style="cursor:pointer; color:var(--primary)" onclick="toggleVector(this)">
+                    <svg class="tag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                    Xem Query Vector
+                </div>
+            </div>
+            <div class="vector-visual">
+                <div style="font-size:10px; color:var(--text-dim); margin-bottom:8px;">QUESTON EMBEDDING (${data.query_vector_dim}D) - 10 DIMS PREVIEW</div>
+                <div class="vector-grid">
+                    ${data.query_vector_preview.map(v => `<div class="vector-cell" style="background: ${getColor(v)}" title="${v}"></div>`).join('')}
+                </div>
+            </div>
+        `;
+
+        row.innerHTML = `
+            <div class="msg-bubble">
+                ${data.answer.replace(/\n/g, '<br>')}
+                ${sourcesHtml}
+            </div>
+            ${statsHtml}
+        `;
+        container.appendChild(row);
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function getColor(val) {
+        // Map embedding value to color
+        const norm = (val + 0.1) / 0.2; // roughly normalize
+        const alpha = Math.max(0.2, Math.min(1, Math.abs(norm)));
+        return val > 0 ? `rgba(124, 106, 247, ${alpha})` : `rgba(248, 113, 113, ${alpha})`;
+    }
+
+    function toggleVector(btn) {
+        const visual = btn.parentElement.nextElementSibling;
+        visual.classList.toggle('active');
+    }
+
+    function viewChunkDetail(s) {
+        const modal = document.getElementById('details-overlay');
+        const body = document.getElementById('modal-body');
+        modal.style.display = 'flex';
+        body.innerHTML = `
+            <div style="margin-bottom:20px;">
+                <label style="font-size:11px; color:var(--text-dim); text-transform:uppercase;">Ngu\u1ed3n g\u1ed1c</label>
+                <div style="font-weight:600; margin-top:4px;">${s.source} (Trang ${s.page_num || 1})</div>
+            </div>
+            <div style="margin-bottom:20px;">
+                <label style="font-size:11px; color:var(--text-dim); text-transform:uppercase;">\u0110\u1ed9 t\u01b0\u01a1ng \u0111\u1ed3ng (Score)</label>
+                <div style="font-weight:700; color:var(--success); font-size:18px; margin-top:4px;">${s.score.toFixed(6)}</div>
+            </div>
+            <div>
+                <label style="font-size:11px; color:var(--text-dim); text-transform:uppercase;">N\u1ed9i dung Chunk</label>
+                <div style="background:rgba(0,0,0,0.3); border:1px solid var(--border); padding:16px; border-radius:8px; font-size:13px; margin-top:8px; line-height:1.6; color:#cbd5e1; max-height:300px; overflow-y:auto;">
+                    ${s.content}
+                </div>
+            </div>
+        `;
+    }
+
+    function closeModal() {
+        document.getElementById('details-overlay').style.display = 'none';
+    }
+
+    document.getElementById('user-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+</script>
+</body>
+</html>

@@ -9,9 +9,13 @@ import time
 import uuid
 import logging
 from datetime import datetime, timezone
+from enum import Enum
+from typing import Optional, List, Dict, Any
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -32,6 +36,14 @@ app = FastAPI(
     description="Hệ thống RAG Chatbot về Gành Đá Đĩa, Phú Yên. Powered by LangChain + MongoDB + Ollama.",
 )
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.error(f"❌ Lỗi validation: {exc.errors()}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": exc.body},
+    )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -46,14 +58,14 @@ app.include_router(admin_router)
 
 class ChatRequest(BaseModel):
     message: str
-    session_id: str = None
+    session_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
     session_id: str
     answer: str
-    sources: list[dict]
-    query_vector_preview: list[float]
+    sources: List[Dict[str, Any]]
+    query_vector_preview: List[float]
     query_vector_dim: int
     search_time_ms: float
     cached: bool
