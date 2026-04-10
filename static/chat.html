@@ -402,7 +402,7 @@
                     document.getElementById('chat-messages').innerHTML = '';
                     data.messages.forEach(m => {
                         if (m.role === 'user') appendMessage('user', m.content);
-                        else appendBotMessage({ answer: m.content, sources: [], query_vector_preview: [], query_vector_dim: 0, response_time_ms: 0, search_time_ms: 0, cached: false });
+                        else appendMessage('bot', m.content);
                     });
                 }
             } catch (err) {
@@ -424,30 +424,63 @@
         input.disabled = true;
         btn.disabled = true;
 
-        // Loading
-        const loadingId = appendLoading();
+        // Create Bot Row
+        const container = document.getElementById('chat-messages');
+        const row = document.createElement('div');
+        row.className = 'msg-row bot';
+        row.innerHTML = `<div class="msg-bubble typing"><span></span><span></span><span></span></div>`;
+        container.appendChild(row);
+        container.scrollTop = container.scrollHeight;
+
+        let fullAnswer = "";
 
         try {
-            const res = await fetch('/chat', {
+            const res = await fetch('/chat/stream', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: text, session_id: sessionId })
             });
-            const data = await res.json();
             
-            if (!res.ok) {
-                throw new Error(data.detail || "Lỗi server");
+            if (!res.ok) throw new Error("Lỗi server kết nối");
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            const bubble = row.querySelector('.msg-bubble');
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        const data = JSON.parse(line);
+                        
+                        if (data.type === 'metadata') {
+                            // Xóa typing và bắt đầu render metadata
+                            bubble.classList.remove('typing');
+                            bubble.innerHTML = '';
+                            renderMetadata(row, data);
+                        } 
+                        else if (data.type === 'text') {
+                            bubble.classList.remove('typing');
+                            fullAnswer += data.content;
+                            // Clean response (some models add extra spaces)
+                            bubble.innerHTML = fullAnswer.replace(/\n/g, '<br>');
+                        }
+                        else if (data.type === 'error') {
+                            bubble.innerHTML = `<span style="color:#f87171">${data.content}</span>`;
+                        }
+                    } catch (e) {}
+                }
+                container.scrollTop = container.scrollHeight;
             }
 
-            sessionId = data.session_id;
-            localStorage.setItem('rag_session_id', sessionId);
-
-            removeLoading(loadingId);
-            appendBotMessage(data);
-
         } catch (err) {
-            removeLoading(loadingId);
-            appendMessage('bot', `❌ Lỗi: ${err.message}`, true);
+            row.querySelector('.msg-bubble').innerHTML = `❌ Lỗi: ${err.message}`;
         } finally {
             input.disabled = false;
             btn.disabled = false;
@@ -468,35 +501,14 @@
         container.scrollTop = container.scrollHeight;
     }
 
-    function appendLoading() {
-        const container = document.getElementById('chat-messages');
-        const id = 'loading-' + Date.now();
-        const row = document.createElement('div');
-        row.className = 'msg-row bot';
-        row.id = id;
-        row.innerHTML = `<div class="msg-bubble typing"><span></span><span></span><span></span></div>`;
-        container.appendChild(row);
-        container.scrollTop = container.scrollHeight;
-        return id;
-    }
-
-    function removeLoading(id) {
-        const el = document.getElementById(id);
-        if (el) el.remove();
-    }
-
-    function appendBotMessage(data) {
-        const container = document.getElementById('chat-messages');
-        const row = document.createElement('div');
-        row.className = 'msg-row bot';
-        
+    function renderMetadata(row, data) {
         let sourcesHtml = '';
         if (data.sources && data.sources.length > 0) {
             sourcesHtml = `
                 <div class="sources-panel">
-                    <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Ngu\u1ed3n tr\u00edch d\u1eabn (${data.sources.length})</div>
+                    <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Nguồn trích dẫn (${data.sources.length})</div>
                     ${data.sources.map(s => `
-                        <div class="source-item" onclick="viewChunkDetail(${JSON.stringify(s).replace(/"/g, '&quot;')})">
+                        <div class="source-item" onclick='viewChunkDetail(${JSON.stringify(s)})'>
                             <div class="source-info">
                                 <span class="source-name">${s.source}</span>
                                 <span class="source-preview">${s.content_preview}...</span>
@@ -511,36 +523,25 @@
         const statsHtml = `
             <div class="msg-meta">
                 <div class="meta-tag">
-                    <svg class="tag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                    ${data.response_time_ms}ms
-                </div>
-                <div class="meta-tag">
                     <svg class="tag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
                     Search: ${data.search_time_ms}ms
                 </div>
                 ${data.cached ? '<div class="meta-tag" style="color:var(--success)">⚡ Cached</div>' : ''}
                 <div class="meta-tag" style="cursor:pointer; color:var(--primary)" onclick="toggleVector(this)">
                     <svg class="tag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-                    Xem Query Vector
+                    View Vector
                 </div>
             </div>
             <div class="vector-visual">
                 <div style="font-size:10px; color:var(--text-dim); margin-bottom:8px;">QUESTON EMBEDDING (${data.query_vector_dim}D) - 10 DIMS PREVIEW</div>
                 <div class="vector-grid">
-                    ${data.query_vector_preview.map(v => `<div class="vector-cell" style="background: ${getColor(v)}" title="${v}"></div>`).join('')}
+                    ${data.query_vector.map(v => `<div class="vector-cell" style="background: ${getColor(v)}" title="${v}"></div>`).join('')}
                 </div>
             </div>
+            ${sourcesHtml}
         `;
-
-        row.innerHTML = `
-            <div class="msg-bubble">
-                ${data.answer.replace(/\n/g, '<br>')}
-                ${sourcesHtml}
-            </div>
-            ${statsHtml}
-        `;
-        container.appendChild(row);
-        container.scrollTop = container.scrollHeight;
+        
+        row.insertAdjacentHTML('beforeend', statsHtml);
     }
 
     function getColor(val) {

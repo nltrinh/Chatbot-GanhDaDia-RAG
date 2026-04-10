@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = 400
     CHUNK_OVERLAP: int = 50
     TOP_K_RESULTS: int = 3
-    EMBEDDING_DIM: int = 768          # nomic-embed-text output dimension
+    OLLAMA_NUM_PREDICT: int = 150       # Gioi han token de tang toc
+    EMBEDDING_DIM: int = 768           # nomic-embed-text output dimension
 
     # API
     APP_TITLE: str = "Chatbot Gành Đá Đĩa"

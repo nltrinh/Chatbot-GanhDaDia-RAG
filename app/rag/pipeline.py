@@ -12,8 +12,8 @@ import hashlib
 import io
 import time
 from datetime import datetime, timezone
-from typing import Optional
-
+from typing import Optional, Generator, List, Dict, Any
+import json
 from langchain_ollama import OllamaEmbeddings, OllamaLLM
 from langchain_mongodb import MongoDBAtlasVectorSearch
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -27,6 +27,54 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# ── Streaming RAG ─────────────────────────────────────────────────────────────
+
+def rag_chat_stream(query: str, history: list[dict] = None) -> Generator[str, None, None]:
+    """
+    Streaming RAG — Trả về từng chunk JSON chuỗi cho Client.
+    """
+    if history is None:
+        history = []
+
+    # 1. Search (Sync - but can be async later)
+    search_result = search_vectors(query)
+    results = search_result["results"]
+
+    if not results:
+        yield json.dumps({"type": "error", "content": "Tôi chưa tìm được thông tin."}) + "\n"
+        return
+
+    # Metadata
+    yield json.dumps({
+        "type": "metadata",
+        "sources": results,
+        "search_time_ms": search_result["search_time_ms"],
+        "cached": search_result["cached"],
+        "query_vector": search_result["query_vector"][:10],
+        "query_vector_dim": len(search_result["query_vector"])
+    }, ensure_ascii=False) + "\n"
+
+    # Context
+    context = build_context_from_results(results)
+    history_str = ""
+    if history:
+        recent = history[-4:]
+        history_str = "\n".join(f"{'User' if m['role']=='user' else 'Bot'}: {m['content']}" for m in recent)
+
+    # 3. Stream
+    llm = get_llm()
+    prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
+    chain = prompt | llm | StrOutputParser()
+
+    for chunk in chain.stream({
+        "context": context,
+        "history": history_str or "Chưa có lịch sử hội thoại.",
+        "question": query,
+    }):
+        yield json.dumps({"type": "text", "content": chunk}, ensure_ascii=False) + "\n"
+
+    yield json.dumps({"type": "done"}, ensure_ascii=False) + "\n"
+
 # ── Khởi tạo các thành phần LangChain ─────────────────────────────────────────
 
 def get_embeddings() -> OllamaEmbeddings:
@@ -37,11 +85,15 @@ def get_embeddings() -> OllamaEmbeddings:
 
 
 def get_llm() -> OllamaLLM:
+    # Lay num_predict tu settings hoac mac dinh 150
+    n_predict = getattr(settings, "OLLAMA_NUM_PREDICT", 150)
+    logger.info(f"Creating LLM with num_predict={n_predict}")
+    
     return OllamaLLM(
         model=settings.OLLAMA_LLM_MODEL,
         base_url=settings.OLLAMA_BASE_URL,
         temperature=0.1,
-        num_predict=512,
+        num_predict=n_predict,
     )
 
 
@@ -212,6 +264,8 @@ def search_vectors(query: str, top_k: int = None) -> dict:
     if top_k is None:
         top_k = settings.TOP_K_RESULTS
 
+    logger.info(f"Hybrid Search for '{query[:30]}...' with top_k={top_k}")
+
     client = MongoClient(settings.MONGO_URI)
     db = client[settings.MONGO_DB_NAME]
     docs_col = db[settings.COLLECTION_DOCUMENTS]
@@ -329,35 +383,46 @@ def search_vectors(query: str, top_k: int = None) -> dict:
 
 # ── RAG Chain (LangChain LCEL) ─────────────────────────────────────────────────
 
-PROMPT_TEMPLATE = """B\u1ea1n l\u00e0 Tr\u1ee3 l\u00fd AI G\u00e0nh \u0110\u00e1 \u0110\u0129a chuy\u00ean nghi\u1ec7p. Nhi\u1ec7m v\u1ee5 c\u1ee7a b\u1ea1n l\u00e0 tr\u1ea3 l\u1eddi d\u1ef1a TR\u00caN T\u00c0I LI\u1ec6U THAM KH\u1ea2O b\u00ean d\u01b0\u1edbi.
+PROMPT_TEMPLATE = """Bạn là Trợ lý AI Gành Đá Đĩa chuyên nghiệp. Nhiệm vụ của bạn là trả lời dựa TRÊN TÀI LIỆU THAM KHẢO bên dưới.
 
-\ud83d\udea8 QUY T\u1eaeC NGHI\u00caM NG\u1eb6T:
-1. CH\u1ec0 tr\u1ea3 l\u1eddi n\u1ed9i dung n\u1ebfu th\u1ea5y trong "T\u00c0I LI\u1ec6U THAM KH\u1ea2O". 
-2. N\u1ebfu th\u00f4ng tin KH\u00d4NG c\u00f3, h\u00e3y tr\u1ea3 l\u1eddi: "D\u1ef1a tr\u00ean t\u00e0i li\u1ec7u hi\u1ec7n c\u00f3, t\u00f4i kh\u00f4ng th\u1ea5y th\u00f4ng tin n\u00e0y."
-3. Tuy\u1ec7t \u0111\u1ed1i KH\u00d4NG \u0111\u01b0\u1ee3c t\u1ef1 b\u1ecba ra con s\u1ed0 ho\u1eb7c ng\u00e0y th\u00e1ng.
-4. LU\u00d4N d\u00f9ng k\u00fd hi\u1ec7u [s\u1ed1 th\u1ee9 t\u1ef1 ngu\u1ed3n] ng\u1ay sau th\u00f4ng tin tr\u00edch d\u1eabn.
+🚨 QUY TẮC NGHIÊM NGẶT:
+1. CHỈ trả lời nội dung nếu thấy trong "TÀI LIỆU THAM KHẢO". 
+2. Nếu thông tin KHÔNG có, hãy trả lời: "Dựa trên tài liệu hiện có, tôi không thấy thông tin này."
+3. Tuyệt đối KHÔNG được tự bịa ra con số hoặc ngày tháng.
+4. LUÔN dùng ký hiệu [số thứ tự nguồn] ngay sau thông tin trích dẫn.
+5. TRẢ LỜI TỐI ĐA 3 CÂU, ngắn gọn và trực tiếp.
+6. Đảm bảo câu trả lời dưới 100 từ.
 
-T\u00c0I LI\u1ec6U THAM KH\u1ea2O:
+TÀI LIỆU THAM KHẢO:
 {context}
 
-L\u1ecaCH S\u1eec H\u1ed8I THO\u1ea0I:
+LỊCH SỬ HỘI THOẠI:
 {history}
 
-C\u00c2U H\u1eceI: {question}
+CÂU HỎI: {question}
 
-H\u00e3y tr\u1ea3 l\u1eddi ng\u1eafn g\u1ecdn, ch\u00ednh x\u00e1c v\u00e0 l\u1ecbch s\u1ef1:"""
+Hãy trả lời ngắn gọn, chính xác và lịch sự:"""
 
 
 def build_context_from_results(results: list[dict]) -> str:
-    """Xây dựng context string từ danh sách kết quả tìm kiếm."""
+    """Xay dung context string va gioi han do dai tung chunk."""
+    MAX_CONTEXT_CHARS = 800  # Gioi han an toan de giam bot thoi gian sinh
     parts = []
     for i, r in enumerate(results, 1):
         source = r.get("source", "unknown")
         page = r.get("page_num", "?")
         score = r.get("score", 0)
+        
+        # Cat noi dung neu vuot qua gioi han
         content = r.get("content", "").strip()
-        parts.append(f"[{i}] Nguồn: {source} (trang {page}, score: {score:.3f})\n{content}")
-    return "\n\n".join(parts)
+        if len(content) > MAX_CONTEXT_CHARS:
+            content = content[:MAX_CONTEXT_CHARS] + "..."
+            
+        parts.append(f"[{i}] Nguon: {source} (trang {page}, score: {score:.3f})\n{content}")
+        
+    context_str = "\n\n".join(parts)
+    logger.info(f"Context built: {len(results)} sources, {len(context_str)} characters.")
+    return context_str
 
 
 def rag_chat(query: str, history: list[dict] = None) -> dict:

@@ -15,13 +15,13 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse, StreamingResponse
+from app.rag.pipeline import rag_chat, rag_chat_stream
+
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from pymongo import MongoClient
 
-from app.rag.pipeline import rag_chat
 from app.core.config import settings
 from app.api.admin import router as admin_router
 
@@ -163,6 +163,21 @@ def chat_endpoint(req: ChatRequest):
         search_time_ms=result["search_time_ms"],
         cached=result["cached"],
         response_time_ms=elapsed_ms,
+    )
+
+
+@app.post("/chat/stream")
+def chat_stream_endpoint(req: ChatRequest):
+    """Endpoint chat streaming — RAG với LangChain."""
+    if not req.message.strip():
+        raise HTTPException(status_code=400, detail="Câu hỏi không được để trống.")
+
+    session_id = req.session_id or str(uuid.uuid4())
+    history = load_history(session_id)
+
+    return StreamingResponse(
+        rag_chat_stream(query=req.message, history=history),
+        media_type="text/event-stream"
     )
 
 

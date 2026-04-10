@@ -34,8 +34,8 @@ graph TD
 ### 2. Thiết lập môi trường
 Tạo môi trường ảo và cài đặt thư viện:
 ```bash
-conda create --prefix ./chatbot_env python=3.11 -y
-conda activate ./chatbot_env
+python -m venv test_env
+source test_env/Scripts/activate  # (hoặc test_env/bin/activate trên Linux)
 pip install -r requirements.txt
 ```
 
@@ -51,9 +51,7 @@ ollama pull nomic-embed-text
 ```
 
 ### 5. Nạp dữ liệu (Ingestion)
-```bash
-python ingest/ingest_data.py
-```
+Không cần chạy script tay. Truy cập trực tiếp vào `http://localhost:8000/admin/ui` sau khi chạy server để upload file trực quan. Hệ thống sẽ tự động chunking và lưu vector.
 
 ## 💻 Sử dụng
 
