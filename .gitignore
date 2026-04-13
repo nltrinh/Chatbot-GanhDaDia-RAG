@@ -48,3 +48,6 @@ data/mongot/
 test_req.json
 out.txt
 test_env.py
+scratch/
+mongodb_data/
+

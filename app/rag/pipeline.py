@@ -291,24 +291,46 @@ def search_vectors(query: str, top_k: int = None) -> dict:
     # 1. L\u1ea5y Vector Embedding cho query
     query_vector = get_query_embedding(query)
     
-    # 2. Vector Search (Semantic)
-    vector_results = list(docs_col.aggregate([
-        {
-            "$vectorSearch": {
-                "index": settings.VECTOR_INDEX_NAME,
-                "path": "embedding",
-                "queryVector": query_vector,
-                "numCandidates": top_k * 10,
-                "limit": top_k * 2,
+    # 2. Vector Search (Semantic) - Native-like Math Fallback cho Local Mongo
+    try:
+        # Thử VectorSearch trước
+        vector_results = list(docs_col.aggregate([
+            {
+                "$vectorSearch": {
+                    "index": settings.VECTOR_INDEX_NAME,
+                    "path": "embedding",
+                    "queryVector": query_vector,
+                    "numCandidates": top_k * 10,
+                    "limit": top_k * 2,
+                }
+            },
+            {
+                "$project": {
+                    "_id": 0, "content": 1, "metadata": 1, 
+                    "vector_score": {"$meta": "vectorSearchScore"}
+                }
             }
-        },
-        {
-            "$project": {
-                "_id": 0, "content": 1, "metadata": 1, 
-                "vector_score": {"$meta": "vectorSearchScore"}
-            }
-        }
-    ]))
+        ]))
+    except Exception:
+        # NATIVE MATH FALLBACK: Tính Cosine Similarity bằng Aggregation Pipeline (Work trên mọi bản Mongo Local)
+        # Score = Sum(Q_i * D_i) / (Norm(Q) * Norm(D))
+        # Vì Norm(Q) là hằng số với 1 query nên có thể bỏ qua để tối ưu.
+        
+        # Tạo biểu thức $multiply cho top 768 dims (Nặng nhưng Native)
+        # Để tối ưu, ta chỉ lấy top 100 docs bằng Keyword hoặc Filter trước, hoặc scan hết nếu dataset nhỏ.
+        
+        dot_product_expr = { "$sum": [ { "$multiply": [ {"$arrayElemAt": ["$embedding", i]}, query_vector[i] ] } for i in range(len(query_vector)) ] }
+        
+        vector_results = list(docs_col.aggregate([
+            {
+                "$project": {
+                    "_id": 0, "content": 1, "metadata": 1,
+                    "vector_score": dot_product_expr
+                }
+            },
+            { "$sort": { "vector_score": -1 } },
+            { "$limit": top_k * 2 }
+        ]))
 
     # 3. Keyword Search (Full-text) d\u00f9ng $text index
     keyword_results = list(docs_col.find(
