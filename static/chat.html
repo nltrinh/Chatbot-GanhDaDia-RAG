@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chatbot Gành Đá Đĩa — RAG v2.0</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         :root {
             --bg: #0b0e14;
@@ -183,6 +184,14 @@
             color: var(--text);
             border-bottom-left-radius: 4px;
         }
+
+        /* Markdown Styling inside bubbles */
+        .msg-bubble p { margin-bottom: 8px; }
+        .msg-bubble p:last-child { margin-bottom: 0; }
+        .msg-bubble strong { color: #fff; font-weight: 700; }
+        .msg-bubble ul, .msg-bubble ol { margin-left: 20px; margin-bottom: 8px; }
+        .msg-bubble li { margin-bottom: 4px; }
+        .msg-bubble h1, .msg-bubble h2, .msg-bubble h3 { font-family: 'Outfit', sans-serif; margin-top: 10px; margin-bottom: 6px; color: #fff; font-size: 16px; }
 
         /* ── Sources & Metadata ── */
         .msg-meta {
@@ -468,8 +477,8 @@
                         else if (data.type === 'text') {
                             bubble.classList.remove('typing');
                             fullAnswer += data.content;
-                            // Clean response (some models add extra spaces)
-                            bubble.innerHTML = fullAnswer.replace(/\n/g, '<br>');
+                            // Clean response and Parse Markdown
+                            bubble.innerHTML = marked.parse(fullAnswer);
                         }
                         else if (data.type === 'error') {
                             bubble.innerHTML = `<span style="color:#f87171">${data.content}</span>`;
@@ -492,9 +501,12 @@
         const container = document.getElementById('chat-messages');
         const row = document.createElement('div');
         row.className = `msg-row ${role}`;
+        
+        let formattedText = role === 'bot' ? marked.parse(text) : text.replace(/\n/g, '<br>');
+
         row.innerHTML = `
             <div class="msg-bubble" style="${isError ? 'color:#f87171' : ''}">
-                ${text.replace(/\n/g, '<br>')}
+                ${formattedText}
             </div>
         `;
         container.appendChild(row);

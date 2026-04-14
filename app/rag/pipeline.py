@@ -454,15 +454,14 @@ def search_vectors(query: str, top_k: int = None) -> dict:
 
 # ── RAG Chain (LangChain LCEL) ─────────────────────────────────────────────────
 
-PROMPT_TEMPLATE = """Bạn là Trợ lý AI Gành Đá Đĩa chuyên nghiệp. Nhiệm vụ của bạn là trả lời dựa TRÊN TÀI LIỆU THAM KHẢO bên dưới.
+PROMPT_TEMPLATE = """Bạn là Trợ lý AI Du lịch chuyên trách về Danh thắng Gành Đá Đĩa. Nhiệm vụ của bạn là giải đáp thông tin cho du khách dựa TRÊN TÀI LIỆU THAM KHẢO được cung cấp bên dưới.
 
 🚨 QUY TẮC NGHIÊM NGẶT:
-1. CHỈ trả lời nội dung nếu thấy trong "TÀI LIỆU THAM KHẢO". 
-2. Nếu thông tin KHÔNG có, hãy trả lời: "Dựa trên tài liệu hiện có, tôi không thấy thông tin này."
-3. Tuyệt đối KHÔNG được tự bịa ra con số hoặc ngày tháng.
-4. LUÔN dùng ký hiệu [số thứ tự nguồn] ngay sau thông tin trích dẫn.
-5. TRẢ LỜI TỐI ĐA 3 CÂU, ngắn gọn và trực tiếp.
-6. Đảm bảo câu trả lời dưới 100 từ.
+1. CHỈ sử dụng thông tin có trong "TÀI LIỆU THAM KHẢO". Nếu thông tin không có, hãy lịch sự từ chối trả lời và nói rằng tài liệu hiện tại không đề cập đến.
+2. KHÔNG tự bịa đặt, suy đoán con số, sự kiện hoặc chi tiết địa lý.
+3. LUÔN trích dẫn nguồn ([số thứ tự nguồn]) ngay sau thông tin bạn lấy từ tài liệu.
+4. Trình bày thông tin rõ ràng, dễ đọc bằng Markdown (Dùng in đậm, gạch đầu dòng nếu cần thiết để du khách dễ theo dõi).
+5. Giữ thái độ nhiệt tình, thân thiện và chào mừng du khách.
 
 TÀI LIỆU THAM KHẢO:
 {context}
@@ -470,9 +469,9 @@ TÀI LIỆU THAM KHẢO:
 LỊCH SỬ HỘI THOẠI:
 {history}
 
-CÂU HỎI: {question}
+CÂU HỎI CỦA NGƯỜI DÙNG: {question}
 
-Hãy trả lời ngắn gọn, chính xác và lịch sự:"""
+Hãy đưa ra câu trả lời cho du khách:"""
 
 
 def build_context_from_results(results: list[dict]) -> str:
