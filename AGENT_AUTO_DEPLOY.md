@@ -10,15 +10,15 @@
 > 
 > Tiếp theo, hãy mở IDE (VSCode / Cursor) có tích hợp AI Agent, mở file này lên và copy/paste dòng thoại dưới đây cho AI của bạn:
 > ---
-> **"Chào Agent, bạn hãy đóng vai là một kỹ sư Backend & AI Expert. Tôi vừa mới kết nối vào một máy chủ mới. Nhiệm vụ của bạn là đọc hiểu file `AGENT_AUTO_DEPLOY.md` này để nắm bắt kiến trúc hiện tại (Qwen2.5 14B, MongoDB 8, BGE-M3) và thực thi tất cả các bước để đưa hệ thống Chatbot RAG Gành Đá Đĩa lên trạng thái chạy ổn định (Ready to Demo). Hãy tự động kiểm tra GPU, cài đặt dependencies, cấu hình ENV và khởi động server với 4 workers. Tôi chỉ việc ngồi xem bạn thực hiện."**
+> **"Chào Agent, bạn hãy đóng vai là một kỹ sư Backend & AI Expert. Tôi vừa mới kết nối vào một máy chủ mới. Nhiệm vụ của bạn là đọc hiểu file `AGENT_AUTO_DEPLOY.md` này để nắm bắt kiến trúc hiện tại ĐÃ ĐƯỢC CỐ ĐỊNH (Qwen2.5 14B, MongoDB 8, BGE-M3) và thực thi tất cả các bước để đưa hệ thống Chatbot RAG Gành Đá Đĩa lên trạng thái chạy ổn định (Ready to Demo). Hãy cài đặt dependencies, cấu hình ENV và khởi động server với 4 workers. Lưu ý: Luôn sử dụng mô hình Qwen2.5:14b bất kể cấu hình máy như thế nào."**
 > ---
 
 ---
 
-## 📋 TỔNG QUAN KIẾN TRÚC HIỆN TẠI
+## 📋 TỔNG QUAN KIẾN TRÚC CỐ ĐỊNH (BEST PERFORMANCE)
 - **Hệ điều hành:** Linux/Ubuntu (Tối ưu cho Vast.ai, Runpod, EC2).
-- **Mô hình LLM:** `qwen2.5` - Linh hoạt theo VRAM (Dùng `1.5b` cho máy yếu, `7b` cho trung bình, `14b` cho máy mạnh).
-- **Mô hình Embedding:** `bge-m3` (Vector 1024D đa ngôn ngữ).
+- **Mô hình LLM (Cố định):** `qwen2.5:14b` (Mô hình tốt nhất cho Tiếng Việt hiện nay).
+- **Mô hình Embedding (Cố định):** `bge-m3` (Vector 1024D đa ngôn ngữ mạnh nhất).
 - **Database:** **MongoDB 8 Local** (Chế độ Replica Set `rs0` để hỗ trợ Vector Search).
 - **Tính năng cao cấp:** Hybrid Search (RRF), Multi-session (Đa phiên chat), Markdown Rendering, Persistence (Lưu lịch sử chat).
 
@@ -26,31 +26,22 @@
 
 ## 🛠 CÁC BƯỚC TRIỂN KHAI CHI TIẾT
 
-### BƯỚC 0: Kiểm tra phần cứng (Quan trọng)
-Agent hãy thực hiện `nvidia-smi` để kiểm tra dung lượng VRAM:
-- **VRAM < 8GB:** Hãy đổi model LLM trong `.env` và lệnh pull thành `qwen2.5:1.5b`.
-- **VRAM 8GB - 12GB:** Dùng `qwen2.5:7b`.
-- **VRAM > 12GB:** Dùng `qwen2.5:14b` (Cấu hình mặc định hiện tại).
-- **Nếu máy chỉ có CPU:** Dùng `llama3.2:1b` để đảm bảo tốc độ phản hồi tối thiểu.
-
 ### BƯỚC 1: Cấu hình Hệ thống & MongoDB 8
-Mục tiêu: Đảm bảo MongoDB 8 đang chạy với Replica Set `rs0`.
 ```bash
 # Khởi động MongoDB (nếu chưa chạy)
 mkdir -p ~/data/db
 mongod --port 27017 --dbpath ~/data/db --replSet rs0 --fork --logpath ~/data/mongod.log
 
-# Khởi tạo Replica Set (chỉ làm 1 lần đầu trên máy mới)
+# Khởi tạo Replica Set
 mongosh --eval 'rs.initiate()'
 ```
 
-### BƯỚC 2: Cài đặt Ollama & Tải mô hình AI
-Agent cần đảm bảo Ollama đã được cài đặt và nhận diện GPU:
-1. Cài đặt Ollama (nếu chưa có):
+### BƯỚC 2: Cài đặt Ollama & Tải mô hình AI Cố định
+1. Cài đặt Ollama:
    ```bash
    curl -fsSL https://ollama.com/install.sh | sh
    ```
-2. Khởi chạy và tải Models:
+2. Tải chính xác cặp Models "khủng":
    ```bash
    ollama pull bge-m3
    ollama pull qwen2.5:14b
@@ -63,7 +54,7 @@ Agent cần đảm bảo Ollama đã được cài đặt và nhận diện GPU:
    source venv/bin/activate
    pip install -r requirements.txt
    ```
-2. Tạo file `.env` (Agent tự động tạo nội dung này):
+2. Tạo file `.env`:
    ```env
    # MongoDB
    MONGO_URI=mongodb://localhost:27017/?replicaSet=rs0
@@ -85,7 +76,7 @@ Agent cần đảm bảo Ollama đã được cài đặt và nhận diện GPU:
    ```bash
    mongosh ganh_da_dia_bot --eval 'db.documents.createIndex({content: "text"})'
    ```
-2. Khởi động Web Server (Production mode):
+2. Khởi động Web Server:
    ```bash
    source venv/bin/activate
    nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4 > server.log 2>&1 &
@@ -97,11 +88,9 @@ Agent cần đảm bảo Ollama đã được cài đặt và nhận diện GPU:
    ```
 
 ### BƯỚC 5: Kiểm tra cuối cùng
-Agent thực hiện lệnh Health Check:
 ```bash
 curl -s http://localhost:8000/health | jq .
 ```
-Nếu `mongodb: "ok"` và `total_chunks > 0`, bạn đã hoàn thành nhiệm vụ!
 
 ---
-> **Lưu ý cho Agent:** Luôn ưu tiên dùng `run_command` để thực thi và `view_file` để kiểm tra trạng thái file. Chúc bạn triển khai thành công!
+> **Lưu ý cho Agent:** Không thay đổi mô hình LLM. Sử dụng đúng Qwen2.5:14b như yêu cầu.
