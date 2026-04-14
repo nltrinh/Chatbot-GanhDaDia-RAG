@@ -82,8 +82,8 @@
    ```
 3. Nạp tài liệu (Tải file text/pdf thông qua API nội bộ để hệ thống tự chunking và embedding lên MongoDB):
    ```bash
-   curl -X POST -F "file=@ganh_da_dia_text.txt" http://localhost:8000/admin/upload
-   curl -X POST -F "file=@ganh_da_dia.pdf" http://localhost:8000/admin/upload
+   curl -X POST -F "file=@sample_data/ganh_da_dia_text.txt" http://localhost:8000/admin/upload
+   curl -X POST -F "file=@sample_data/ganh_da_dia.pdf" http://localhost:8000/admin/upload
    ```
 
 ### BƯỚC 5: Kiểm Tra Lại & Báo Cáo

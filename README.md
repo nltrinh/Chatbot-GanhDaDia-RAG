@@ -76,7 +76,7 @@ mongosh ganh_da_dia_bot --eval 'db.documents.createIndex({content: "text"})'
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 # Mở Terminal khác để nhúng File Tri thức (Tự Tách Chunk & Cấy Vector)
-curl -X POST -F "file=@ganh_da_dia_text.txt" http://localhost:8000/admin/upload
+curl -X POST -F "file=@sample_data/ganh_da_dia_text.txt" http://localhost:8000/admin/upload
 ```
 
 🌍 Mọi thứ đã hoàn tất, mời bạn truy cập:
