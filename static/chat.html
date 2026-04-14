@@ -339,8 +339,13 @@
 
         <div class="nav">
             <span class="nav-label">Hội thoại gần đây</span>
-            <div id="history-list">
-                <div class="history-item active">Phiên chat hiện tại</div>
+            <div style="margin-bottom: 16px;">
+                <button onclick="createNewSession()" style="width:100%; padding: 10px; background: rgba(124, 106, 247, 0.2); color: #fff; border: 1px solid var(--primary); border-radius: 8px; cursor: pointer; font-weight: 600; text-align: center; transition: all 0.2s;">
+                    + Đoạn Chat Mới
+                </button>
+            </div>
+            <div id="history-list" style="overflow-y:auto; flex:1;">
+                <div class="history-item active">Phiên đang tải...</div>
             </div>
         </div>
 
@@ -393,30 +398,125 @@
     </div>
 
 <script>
+    function generateUUID() {
+        return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c =>
+            (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+        );
+    }
+
     let sessionId = localStorage.getItem('rag_session_id');
+    if (!sessionId) {
+        sessionId = generateUUID();
+        localStorage.setItem('rag_session_id', sessionId);
+    }
 
     function autoExpand(el) {
         el.style.height = 'auto';
         el.style.height = (el.scrollHeight) + 'px';
     }
 
+    async function loadSessions() {
+        try {
+            const res = await fetch('/sessions');
+            const data = await res.json();
+            const listObj = document.getElementById('history-list');
+            listObj.innerHTML = '';
+            
+            if (data.sessions && data.sessions.length > 0) {
+                let foundCurrent = false;
+                data.sessions.forEach(s => {
+                    if(s.id === sessionId) foundCurrent = true;
+                    listObj.innerHTML += `
+                        <div class="history-item ${s.id === sessionId ? 'active' : ''}" onclick="switchSession('${s.id}')">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                            ${s.title}
+                        </div>
+                    `;
+                });
+                
+                // Nếu session hiện tại chưa có lời thoại (chưa được backend lưu) nhưng đã được sinh ra
+                if(!foundCurrent) {
+                    listObj.innerHTML = `
+                        <div class="history-item active" onclick="switchSession('${sessionId}')">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                            Đoạn chat mới
+                        </div>
+                    ` + listObj.innerHTML;
+                }
+            } else {
+                listObj.innerHTML = `
+                    <div class="history-item active">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                        Đoạn chat mới
+                    </div>
+                `;
+            }
+        } catch (err) {
+            console.error("Lỗi tải Sessions:", err);
+        }
+    }
+
+    async function switchSession(id) {
+        if(id === sessionId) return;
+        sessionId = id;
+        localStorage.setItem('rag_session_id', id);
+        
+        // Cập nhật UI menu trước
+        const items = document.querySelectorAll('.history-item');
+        items.forEach(el => el.classList.remove('active'));
+        const eventEl = window.event && window.event.currentTarget;
+        if(eventEl) {
+            eventEl.classList.add('active');
+        }
+
+        // Tải lịch sử
+        await loadCurrentChat();
+    }
+
+    function createNewSession() {
+        sessionId = generateUUID();
+        localStorage.setItem('rag_session_id', sessionId);
+        
+        document.getElementById('chat-messages').innerHTML = `
+            <div class="msg-row bot">
+                <div class="msg-bubble">
+                    Xin chào! Tôi là trợ lý ảo Gành Đá Đĩa. Tôi đã được nạp dữ liệu từ các tài liệu bạn upload. Bạn muốn hỏi gì hôm nay?
+                </div>
+            </div>
+        `;
+        loadSessions(); // vẽ lại cột trái
+    }
+
+    async function loadCurrentChat() {
+        try {
+            const res = await fetch(`/history/${sessionId}`);
+            const data = await res.json();
+            const container = document.getElementById('chat-messages');
+            if (data.messages && data.messages.length > 0) {
+                container.innerHTML = '';
+                data.messages.forEach(m => {
+                    if (m.role === 'user') appendMessage('user', m.content);
+                    else appendMessage('bot', m.content);
+                });
+            } else {
+                container.innerHTML = `
+                    <div class="msg-row bot">
+                        <div class="msg-bubble">
+                            Chưa có lịch sử. Bạn muốn hỏi gì hôm nay về Gành Đá Đĩa?
+                        </div>
+                    </div>
+                `;
+            }
+        } catch (err) {
+            console.error("Lỗi load history:", err);
+        }
+    }
+
     // Load history on startup
     window.onload = async () => {
+        await loadSessions();
         if (sessionId) {
-            try {
-                const res = await fetch(`/history/${sessionId}`);
-                const data = await res.json();
-                if (data.messages && data.messages.length > 0) {
-                    // Xóa nhắn chào mặc định nếu có history
-                    document.getElementById('chat-messages').innerHTML = '';
-                    data.messages.forEach(m => {
-                        if (m.role === 'user') appendMessage('user', m.content);
-                        else appendMessage('bot', m.content);
-                    });
-                }
-            } catch (err) {
-                console.error("Lỗi load history:", err);
-            }
+            await loadCurrentChat();
         }
     };
 
@@ -494,6 +594,8 @@
             input.disabled = false;
             btn.disabled = false;
             input.focus();
+            // Refresh sessions to update titles in sidebar (especially for new chats)
+            loadSessions();
         }
     }
 

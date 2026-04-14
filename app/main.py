@@ -189,10 +189,34 @@ def chat_stream_endpoint(req: ChatRequest):
     history = load_history(session_id)
 
     return StreamingResponse(
-        rag_chat_stream(query=req.message, history=history),
+        rag_chat_stream(query=req.message, session_id=session_id, history=history),
         media_type="text/event-stream",
     )
 
+
+@app.get("/sessions")
+def get_all_sessions():
+    try:
+        col = _get_history_col()
+        # Find all session docs, project needed fields, sort descending by update time
+        docs = col.find({}, {"session_id": 1, "updated_at": 1, "messages": {"$slice": 1}}).sort("updated_at", -1)
+        sessions = []
+        for d in docs:
+            # Generate a title from the first message
+            if "messages" in d and len(d["messages"]) > 0:
+                first_msg = d["messages"][0]["content"]
+                title = first_msg[:35] + "..." if len(first_msg) > 35 else first_msg
+            else:
+                title = "Đoạn chat mới"
+            
+            sessions.append({
+                "id": d["session_id"],
+                "title": title
+            })
+        return {"sessions": sessions}
+    except Exception as e:
+        logger.error(f"Lỗi load sessions: {e}")
+        return {"sessions": []}
 
 @app.get("/history/{session_id}")
 def get_history(session_id: str):

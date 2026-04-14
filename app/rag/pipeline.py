@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 def rag_chat_stream(
-    query: str, history: list[dict] = None
+    query: str, session_id: str, history: list[dict] = None
 ) -> Generator[str, None, None]:
     """
     Streaming RAG — Trả về từng chunk JSON chuỗi cho Client.
@@ -76,6 +76,7 @@ def rag_chat_stream(
     prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
     chain = prompt | llm | StrOutputParser()
 
+    full_answer = ""
     for chunk in chain.stream(
         {
             "context": context,
@@ -83,7 +84,16 @@ def rag_chat_stream(
             "question": query,
         }
     ):
+        full_answer += chunk
         yield json.dumps({"type": "text", "content": chunk}, ensure_ascii=False) + "\n"
+
+    # Ghi nhận lịch sử khi stream kết thúc
+    history.append({"role": "user", "content": query})
+    history.append({"role": "assistant", "content": full_answer})
+    
+    # Import save_history here avoiding circular import
+    from app.main import save_history
+    save_history(session_id, history)
 
     yield json.dumps({"type": "done"}, ensure_ascii=False) + "\n"
 
