@@ -17,7 +17,7 @@
 
 ## 📋 TỔNG QUAN KIẾN TRÚC HIỆN TẠI
 - **Hệ điều hành:** Linux/Ubuntu (Tối ưu cho Vast.ai, Runpod, EC2).
-- **Mô hình LLM:** `qwen2.5:14b` (Ưu tiên GPU VRAM 16GB+, hỗ trợ Tiếng Việt xuất sắc).
+- **Mô hình LLM:** `qwen2.5` - Linh hoạt theo VRAM (Dùng `1.5b` cho máy yếu, `7b` cho trung bình, `14b` cho máy mạnh).
 - **Mô hình Embedding:** `bge-m3` (Vector 1024D đa ngôn ngữ).
 - **Database:** **MongoDB 8 Local** (Chế độ Replica Set `rs0` để hỗ trợ Vector Search).
 - **Tính năng cao cấp:** Hybrid Search (RRF), Multi-session (Đa phiên chat), Markdown Rendering, Persistence (Lưu lịch sử chat).
@@ -25,6 +25,13 @@
 ---
 
 ## 🛠 CÁC BƯỚC TRIỂN KHAI CHI TIẾT
+
+### BƯỚC 0: Kiểm tra phần cứng (Quan trọng)
+Agent hãy thực hiện `nvidia-smi` để kiểm tra dung lượng VRAM:
+- **VRAM < 8GB:** Hãy đổi model LLM trong `.env` và lệnh pull thành `qwen2.5:1.5b`.
+- **VRAM 8GB - 12GB:** Dùng `qwen2.5:7b`.
+- **VRAM > 12GB:** Dùng `qwen2.5:14b` (Cấu hình mặc định hiện tại).
+- **Nếu máy chỉ có CPU:** Dùng `llama3.2:1b` để đảm bảo tốc độ phản hồi tối thiểu.
 
 ### BƯỚC 1: Cấu hình Hệ thống & MongoDB 8
 Mục tiêu: Đảm bảo MongoDB 8 đang chạy với Replica Set `rs0`.
