@@ -45,8 +45,8 @@
    ```
 2. Background chạy Ollama nếu chưa chạy (Hoặc kiểm tra bằng `ollama list`). Sau đó kích hoạt tải mô hình AI chạy Local:
    ```bash
-   ollama pull nomic-embed-text
-   ollama pull llama3.2:1b
+   ollama pull bge-m3
+   ollama pull qwen2.5:14b
    ```
 
 ### BƯỚC 3: Cài đặt Môi trường Python Backend
@@ -66,8 +66,8 @@
 
    # Ollama
    OLLAMA_BASE_URL=http://localhost:11434
-   OLLAMA_LLM_MODEL=llama3.2:1b
-   OLLAMA_EMBED_MODEL=nomic-embed-text
+   OLLAMA_LLM_MODEL=qwen2.5:14b
+   OLLAMA_EMBED_MODEL=bge-m3
    ```
 
 ### BƯỚC 4: Khởi chạy API Server & Nạp Dữ Liệu

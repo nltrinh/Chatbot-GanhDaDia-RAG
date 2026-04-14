@@ -24,7 +24,7 @@
 
 - **100% Khép Kín (Local-First):** Hệ thống được xây dựng để không phụ thuộc vào bất kỳ API nào bên ngoài (như OpenAI, Anthropic,...). Đảm bảo bảo vệ dữ liệu nội quyền (`Privacy-first`) và zero-cost execution (Không mất tiền inference).
 - **RAG Nâng Cao (Hybrid Search):** Thay vì chỉ match text thông thường, dự án cài đặt cơ chế lai ghép **Reciprocal Rank Fusion (RRF)**. Kết hợp sức mạnh của **Native MQL Vector Dot-Product** trên không gian 768 chiều và **BM25 Keyword Search** của hạt nhân MongoDB 8.
-- **LLM Thời Gian Thực:** Trang bị mô hình não Llama 3.2 1B hoạt động cực mượt nhờ nền tảng nội suy Ollama.
+- **LLM Thời Gian Thực (Chuyên Trị Tiếng Việt):** Trang bị mô hình não **Qwen-2.5 14B** (phiên bản LLM mã nguồn mở đỉnh cao nhất cho văn bản Tiếng Việt hiện nay) hoạt động cực mượt nhờ nền tảng nội suy Ollama, phù hợp cho GPU từ 16GB VRAM.
 - **Automated AI Deployment:** Đóng gói thông minh dưới dạng *Agent Config* - một AI Agent có thể đọc mã và tự động setup Cloud Server từ máy trắng sang Trạng thái Ready để Demo.
 
 ## 🏗️ Kiến Trúc Khung
@@ -33,8 +33,8 @@ Dự án bao gồm 4 thành phần trụ cột:
 1. **Application Server (FastAPI):** Orchestrator điều phối API, Web UI, tiếp nhận Files và xử lý các luồng Streaming cho Client.
 2. **Knowledge Base (MongoDB 8 local):** Trung tâm cơ sở lưu trữ dữ liệu văn bản linh hoạt và hệ Vector Search phi cấu trúc.
 3. **Inference Neural Engine (Ollama):** Trạm phát API nội bộ cấp quyền truy xuất hai model:
-   - `nomic-embed-text`: Tokenizer chuyển hóa chữ văn tự sang toạ độ không gian.
-   - `llama3.2:1b`: Core LLM hiểu tiếng Việt để giao tiếp.
+   - `bge-m3`: Tokenizer đa ngôn ngữ mạnh nhất để chuyển hóa chữ Hán/Việt/Anh sang toạ độ không gian.
+   - `qwen2.5:14b`: Core LLM vượt trội cho Tiếng Việt để giao tiếp & phân tích tài liệu.
 4. **LangChain 0.3 Framework:** Công nghệ mắc nối lõi bằng chuẩn `LCEL` (LangChain Expression Language).
 
 ## 🚀 Triển Khai Nhanh (Quick Start)
@@ -58,8 +58,8 @@ mongosh --eval 'rs.initiate()'
 
 **Bước 2: Cấu hình Trí tuệ (Ollama)**
 ```bash
-ollama pull nomic-embed-text
-ollama pull llama3.2:1b
+ollama pull bge-m3
+ollama pull qwen2.5:14b
 ```
 
 **Bước 3: Biên Dịch Backend**
