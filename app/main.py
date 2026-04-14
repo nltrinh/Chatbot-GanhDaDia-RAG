@@ -25,7 +25,9 @@ from pymongo import MongoClient
 from app.core.config import settings
 from app.api.admin import router as admin_router
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # ── App ────────────────────────────────────────────────────────────────────────
@@ -36,6 +38,7 @@ app = FastAPI(
     description="Hệ thống RAG Chatbot về Gành Đá Đĩa, Phú Yên. Powered by LangChain + MongoDB + Ollama.",
 )
 
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     logger.error(f"❌ Lỗi validation: {exc.errors()}")
@@ -43,6 +46,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         status_code=422,
         content={"detail": exc.errors(), "body": exc.body},
     )
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -55,6 +59,7 @@ app.include_router(admin_router)
 
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
+
 
 class ChatRequest(BaseModel):
     message: str
@@ -73,6 +78,7 @@ class ChatResponse(BaseModel):
 
 
 # ── MongoDB helpers ────────────────────────────────────────────────────────────
+
 
 def _get_history_col():
     client = MongoClient(settings.MONGO_URI, serverSelectionTimeoutMS=3000)
@@ -110,6 +116,7 @@ def save_history(session_id: str, messages: list[dict]):
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
+
 @app.get("/health")
 def health():
     """Kiểm tra trạng thái các service."""
@@ -117,8 +124,12 @@ def health():
         client = MongoClient(settings.MONGO_URI, serverSelectionTimeoutMS=2000)
         client.admin.command("ping")
         mongo_ok = True
-        total_chunks = client[settings.MONGO_DB_NAME][settings.COLLECTION_DOCUMENTS].count_documents({})
-        total_files = client[settings.MONGO_DB_NAME][settings.COLLECTION_UPLOADED_FILES].count_documents({})
+        total_chunks = client[settings.MONGO_DB_NAME][
+            settings.COLLECTION_DOCUMENTS
+        ].count_documents({})
+        total_files = client[settings.MONGO_DB_NAME][
+            settings.COLLECTION_UPLOADED_FILES
+        ].count_documents({})
     except Exception:
         mongo_ok = False
         total_chunks = 0
@@ -152,7 +163,9 @@ def chat_endpoint(req: ChatRequest):
     history.append({"role": "assistant", "content": result["answer"]})
     save_history(session_id, history)
 
-    logger.info(f"✅ [{session_id[:8]}] '{req.message[:40]}' → {elapsed_ms}ms (cached={result['cached']})")
+    logger.info(
+        f"✅ [{session_id[:8]}] '{req.message[:40]}' → {elapsed_ms}ms (cached={result['cached']})"
+    )
 
     return ChatResponse(
         session_id=session_id,
@@ -177,7 +190,7 @@ def chat_stream_endpoint(req: ChatRequest):
 
     return StreamingResponse(
         rag_chat_stream(query=req.message, history=history),
-        media_type="text/event-stream"
+        media_type="text/event-stream",
     )
 
 
@@ -199,17 +212,22 @@ def delete_history(session_id: str):
 
 # ── HTML pages ─────────────────────────────────────────────────────────────────
 
+
 @app.get("/", response_class=HTMLResponse)
 def chat_page():
     p = Path(__file__).parent.parent / "static" / "chat.html"
-    return p.read_text(encoding="utf-8") if p.exists() else HTMLResponse(
-        "<h2>Chưa có chat.html — tạo file static/chat.html</h2>"
+    return (
+        p.read_text(encoding="utf-8")
+        if p.exists()
+        else HTMLResponse("<h2>Chưa có chat.html — tạo file static/chat.html</h2>")
     )
 
 
 @app.get("/admin/ui", response_class=HTMLResponse)
 def admin_ui_page():
     p = Path(__file__).parent.parent / "static" / "admin.html"
-    return p.read_text(encoding="utf-8") if p.exists() else HTMLResponse(
-        "<h2>Chưa có admin.html — tạo file static/admin.html</h2>"
+    return (
+        p.read_text(encoding="utf-8")
+        if p.exists()
+        else HTMLResponse("<h2>Chưa có admin.html — tạo file static/admin.html</h2>")
     )

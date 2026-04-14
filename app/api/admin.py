@@ -32,12 +32,14 @@ MAX_FILE_MB = 20
 
 # ── MongoDB helper ─────────────────────────────────────────────────────────────
 
+
 def get_db():
     client = MongoClient(settings.MONGO_URI, serverSelectionTimeoutMS=5000)
     return client[settings.MONGO_DB_NAME]
 
 
 # ── Background pipeline ────────────────────────────────────────────────────────
+
 
 def _process_file_background(
     file_id: str,
@@ -50,8 +52,11 @@ def _process_file_background(
     col = db[settings.COLLECTION_UPLOADED_FILES]
 
     def set_status(status: str, pct: int = 0, extra: dict = None):
-        update = {"status": status, "progress_pct": pct,
-                  "updated_at": datetime.now(timezone.utc)}
+        update = {
+            "status": status,
+            "progress_pct": pct,
+            "updated_at": datetime.now(timezone.utc),
+        }
         if extra:
             update.update(extra)
         col.update_one({"file_id": file_id}, {"$set": update})
@@ -68,15 +73,17 @@ def _process_file_background(
 
         col.update_one(
             {"file_id": file_id},
-            {"$set": {
-                "status": "ready",
-                "progress_pct": 100,
-                "chunks_total": result["chunks_total"],
-                "chunks_saved": result["chunks_saved"],
-                "chunks_skipped": result["skipped"],
-                "completed_at": datetime.now(timezone.utc),
-                "updated_at": datetime.now(timezone.utc),
-            }}
+            {
+                "$set": {
+                    "status": "ready",
+                    "progress_pct": 100,
+                    "chunks_total": result["chunks_total"],
+                    "chunks_saved": result["chunks_saved"],
+                    "chunks_skipped": result["skipped"],
+                    "completed_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc),
+                }
+            },
         )
 
     except Exception as e:
@@ -85,6 +92,7 @@ def _process_file_background(
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
+
 
 @router.post("/upload")
 async def upload_file(
@@ -96,31 +104,35 @@ async def upload_file(
     if suffix not in ALLOWED_TYPES:
         raise HTTPException(
             status_code=400,
-            detail=f"Định dạng không hỗ trợ: {suffix}. Chỉ chấp nhận: {', '.join(ALLOWED_TYPES)}"
+            detail=f"Định dạng không hỗ trợ: {suffix}. Chỉ chấp nhận: {', '.join(ALLOWED_TYPES)}",
         )
 
     content = await file.read()
     if len(content) > MAX_FILE_MB * 1024 * 1024:
-        raise HTTPException(status_code=400, detail=f"File quá lớn. Tối đa {MAX_FILE_MB}MB")
+        raise HTTPException(
+            status_code=400, detail=f"File quá lớn. Tối đa {MAX_FILE_MB}MB"
+        )
 
     db = get_db()
     file_id = str(uuid.uuid4())
 
-    db[settings.COLLECTION_UPLOADED_FILES].insert_one({
-        "file_id": file_id,
-        "file_name": file.filename,
-        "file_type": suffix.lstrip("."),
-        "file_size": len(content),
-        "status": "queued",
-        "progress_pct": 0,
-        "chunks_total": 0,
-        "chunks_saved": 0,
-        "chunks_skipped": 0,
-        "error_msg": None,
-        "uploaded_at": datetime.now(timezone.utc),
-        "updated_at": datetime.now(timezone.utc),
-        "completed_at": None,
-    })
+    db[settings.COLLECTION_UPLOADED_FILES].insert_one(
+        {
+            "file_id": file_id,
+            "file_name": file.filename,
+            "file_type": suffix.lstrip("."),
+            "file_size": len(content),
+            "status": "queued",
+            "progress_pct": 0,
+            "chunks_total": 0,
+            "chunks_saved": 0,
+            "chunks_skipped": 0,
+            "error_msg": None,
+            "uploaded_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
+            "completed_at": None,
+        }
+    )
 
     background_tasks.add_task(
         _process_file_background,
@@ -142,12 +154,26 @@ async def upload_file(
 def list_files():
     """Danh sách tất cả file đã upload."""
     db = get_db()
-    files = list(db[settings.COLLECTION_UPLOADED_FILES].find(
-        {},
-        {"_id": 0, "file_id": 1, "file_name": 1, "file_type": 1,
-         "file_size": 1, "status": 1, "progress_pct": 1, "chunks_total": 1,
-         "chunks_saved": 1, "uploaded_at": 1, "completed_at": 1}
-    ).sort("uploaded_at", -1))
+    files = list(
+        db[settings.COLLECTION_UPLOADED_FILES]
+        .find(
+            {},
+            {
+                "_id": 0,
+                "file_id": 1,
+                "file_name": 1,
+                "file_type": 1,
+                "file_size": 1,
+                "status": 1,
+                "progress_pct": 1,
+                "chunks_total": 1,
+                "chunks_saved": 1,
+                "uploaded_at": 1,
+                "completed_at": 1,
+            },
+        )
+        .sort("uploaded_at", -1)
+    )
     return {"files": files, "total": len(files)}
 
 
@@ -155,7 +181,9 @@ def list_files():
 def get_file_status(file_id: str):
     """Chi tiết và tiến độ xử lý của một file."""
     db = get_db()
-    record = db[settings.COLLECTION_UPLOADED_FILES].find_one({"file_id": file_id}, {"_id": 0})
+    record = db[settings.COLLECTION_UPLOADED_FILES].find_one(
+        {"file_id": file_id}, {"_id": 0}
+    )
     if not record:
         raise HTTPException(status_code=404, detail="File không tồn tại")
     return record
@@ -169,7 +197,9 @@ def delete_file(file_id: str):
     if not record:
         raise HTTPException(status_code=404, detail="File không tồn tại")
 
-    result = db[settings.COLLECTION_DOCUMENTS].delete_many({"metadata.file_id": file_id})
+    result = db[settings.COLLECTION_DOCUMENTS].delete_many(
+        {"metadata.file_id": file_id}
+    )
     db[settings.COLLECTION_UPLOADED_FILES].delete_one({"file_id": file_id})
 
     return {
@@ -188,7 +218,9 @@ def get_stats():
     processing = db[settings.COLLECTION_UPLOADED_FILES].count_documents(
         {"status": {"$in": ["queued", "processing"]}}
     )
-    failed = db[settings.COLLECTION_UPLOADED_FILES].count_documents({"status": "failed"})
+    failed = db[settings.COLLECTION_UPLOADED_FILES].count_documents(
+        {"status": "failed"}
+    )
     cached_queries = db[settings.COLLECTION_VECTOR_CACHE].count_documents({})
 
     by_type = {
@@ -211,6 +243,7 @@ def get_stats():
 
 # ── Vector Search Endpoint ─────────────────────────────────────────────────────
 
+
 class SearchRequest(BaseModel):
     query: str
     top_k: int = 5
@@ -221,7 +254,10 @@ def clear_vector_cache():
     """Xóa toàn bộ cache tìm kiếm vector."""
     db = get_db()
     result = db[settings.COLLECTION_VECTOR_CACHE].delete_many({})
-    return {"message": "Đã xóa toàn bộ cache tìm kiếm", "deleted_count": result.deleted_count}
+    return {
+        "message": "Đã xóa toàn bộ cache tìm kiếm",
+        "deleted_count": result.deleted_count,
+    }
 
 
 @router.post("/search")

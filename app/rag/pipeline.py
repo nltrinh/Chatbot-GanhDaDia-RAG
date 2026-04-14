@@ -29,7 +29,10 @@ logger = logging.getLogger(__name__)
 
 # ── Streaming RAG ─────────────────────────────────────────────────────────────
 
-def rag_chat_stream(query: str, history: list[dict] = None) -> Generator[str, None, None]:
+
+def rag_chat_stream(
+    query: str, history: list[dict] = None
+) -> Generator[str, None, None]:
     """
     Streaming RAG — Trả về từng chunk JSON chuỗi cho Client.
     """
@@ -41,41 +44,52 @@ def rag_chat_stream(query: str, history: list[dict] = None) -> Generator[str, No
     results = search_result["results"]
 
     if not results:
-        yield json.dumps({"type": "error", "content": "Tôi chưa tìm được thông tin."}) + "\n"
+        yield json.dumps(
+            {"type": "error", "content": "Tôi chưa tìm được thông tin."}
+        ) + "\n"
         return
 
     # Metadata
-    yield json.dumps({
-        "type": "metadata",
-        "sources": results,
-        "search_time_ms": search_result["search_time_ms"],
-        "cached": search_result["cached"],
-        "query_vector": search_result["query_vector"][:10],
-        "query_vector_dim": len(search_result["query_vector"])
-    }, ensure_ascii=False) + "\n"
+    yield json.dumps(
+        {
+            "type": "metadata",
+            "sources": results,
+            "search_time_ms": search_result["search_time_ms"],
+            "cached": search_result["cached"],
+            "query_vector": search_result["query_vector"][:10],
+            "query_vector_dim": len(search_result["query_vector"]),
+        },
+        ensure_ascii=False,
+    ) + "\n"
 
     # Context
     context = build_context_from_results(results)
     history_str = ""
     if history:
         recent = history[-4:]
-        history_str = "\n".join(f"{'User' if m['role']=='user' else 'Bot'}: {m['content']}" for m in recent)
+        history_str = "\n".join(
+            f"{'User' if m['role']=='user' else 'Bot'}: {m['content']}" for m in recent
+        )
 
     # 3. Stream
     llm = get_llm()
     prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
     chain = prompt | llm | StrOutputParser()
 
-    for chunk in chain.stream({
-        "context": context,
-        "history": history_str or "Chưa có lịch sử hội thoại.",
-        "question": query,
-    }):
+    for chunk in chain.stream(
+        {
+            "context": context,
+            "history": history_str or "Chưa có lịch sử hội thoại.",
+            "question": query,
+        }
+    ):
         yield json.dumps({"type": "text", "content": chunk}, ensure_ascii=False) + "\n"
 
     yield json.dumps({"type": "done"}, ensure_ascii=False) + "\n"
 
+
 # ── Khởi tạo các thành phần LangChain ─────────────────────────────────────────
+
 
 def get_embeddings() -> OllamaEmbeddings:
     return OllamaEmbeddings(
@@ -88,7 +102,7 @@ def get_llm() -> OllamaLLM:
     # Lay num_predict tu settings hoac mac dinh 150
     n_predict = getattr(settings, "OLLAMA_NUM_PREDICT", 150)
     logger.info(f"Creating LLM with num_predict={n_predict}")
-    
+
     return OllamaLLM(
         model=settings.OLLAMA_LLM_MODEL,
         base_url=settings.OLLAMA_BASE_URL,
@@ -112,6 +126,7 @@ def get_vector_store() -> MongoDBAtlasVectorSearch:
 
 # ── Text Splitter ──────────────────────────────────────────────────────────────
 
+
 def get_splitter() -> RecursiveCharacterTextSplitter:
     """RecursiveCharacterTextSplitter: tách thông minh theo đoạn văn, câu, từ."""
     return RecursiveCharacterTextSplitter(
@@ -123,6 +138,7 @@ def get_splitter() -> RecursiveCharacterTextSplitter:
 
 
 # ── Đọc file ───────────────────────────────────────────────────────────────────
+
 
 def extract_text_from_bytes(content: bytes, file_type: str) -> list[dict]:
     """
@@ -137,6 +153,7 @@ def extract_text_from_bytes(content: bytes, file_type: str) -> list[dict]:
 
     elif file_type == ".pdf":
         import pypdf
+
         reader = pypdf.PdfReader(io.BytesIO(content))
         for i, page in enumerate(reader.pages, 1):
             text = page.extract_text() or ""
@@ -145,6 +162,7 @@ def extract_text_from_bytes(content: bytes, file_type: str) -> list[dict]:
 
     elif file_type == ".docx":
         import docx
+
         doc = docx.Document(io.BytesIO(content))
         full_text = "\n\n".join(p.text for p in doc.paragraphs if p.text.strip())
         pages.append({"text": full_text, "page_num": 1})
@@ -153,6 +171,7 @@ def extract_text_from_bytes(content: bytes, file_type: str) -> list[dict]:
 
 
 # ── Ingest Pipeline ────────────────────────────────────────────────────────────
+
 
 def ingest_file(
     content: bytes,
@@ -163,11 +182,11 @@ def ingest_file(
     """
     Pipeline nạp tài liệu vào MongoDB bằng LangChain.
     Tự động chunking, embedding và lưu trữ — không cần chỉ định topic.
-    
+
     Returns: {chunks_total, chunks_saved, skipped}
     """
     file_hash = hashlib.sha256(content).hexdigest()
-    
+
     # Đọc nội dung
     pages = extract_text_from_bytes(content, file_type)
     if not pages:
@@ -193,7 +212,7 @@ def ingest_file(
     # Chunking bằng RecursiveCharacterTextSplitter
     splitter = get_splitter()
     chunks = splitter.split_documents(raw_docs)
-    
+
     # Thêm chunk index vào metadata
     for i, chunk in enumerate(chunks):
         chunk.metadata["chunk_index"] = i
@@ -203,33 +222,33 @@ def ingest_file(
     # Embed + lưu vào MongoDB qua LangChain
     client = MongoClient(settings.MONGO_URI)
     collection = client[settings.MONGO_DB_NAME][settings.COLLECTION_DOCUMENTS]
-    
+
     embeddings = get_embeddings()
-    
+
     saved = 0
     skipped = 0
-    
+
     # Nhúng từng batch để theo dõi tiến độ
     BATCH_SIZE = 5
     for batch_start in range(0, len(chunks), BATCH_SIZE):
         batch = chunks[batch_start : batch_start + BATCH_SIZE]
         texts = [c.page_content for c in batch]
-        
+
         # Tạo embeddings
         vectors = embeddings.embed_documents(texts)
-        
+
         for chunk, vector in zip(batch, vectors):
             doc_id = chunk.metadata["doc_id"]
-            
+
             # Kiểm tra trùng lặp
             if collection.find_one({"metadata.doc_id": doc_id}):
                 skipped += 1
                 continue
-            
+
             # Lưu vào MongoDB
             mongo_doc = {
                 "doc_id": doc_id,  # Để thỏa mãn unique index doc_id_1
-                "content":  chunk.page_content,
+                "content": chunk.page_content,
                 "embedding": vector,
                 "metadata": chunk.metadata,
                 "created_at": datetime.now(timezone.utc),
@@ -248,6 +267,7 @@ def ingest_file(
 
 
 # ── Vector Search (với Cache) ──────────────────────────────────────────────────
+
 
 def get_query_embedding(query: str) -> list[float]:
     """Tạo embedding từ câu hỏi và trả về vector."""
@@ -270,12 +290,12 @@ def search_vectors(query: str, top_k: int = None) -> dict:
     db = client[settings.MONGO_DB_NAME]
     docs_col = db[settings.COLLECTION_DOCUMENTS]
     cache_col = db[settings.COLLECTION_VECTOR_CACHE]
-    
+
     # Chu\u1ea9n h\u00f3a query \u0111\u1ec3 cache chính x\u00e1c
     query_norm = query.strip().lower()
     query_hash = hashlib.md5(query_norm.encode()).hexdigest()
     cached = cache_col.find_one({"query_hash": query_hash, "top_k": top_k})
-    
+
     if cached:
         logger.info(f"\u26a1 Cache hit: '{query[:40]}'")
         client.close()
@@ -285,65 +305,86 @@ def search_vectors(query: str, top_k: int = None) -> dict:
             "cached": True,
             "search_time_ms": 0,
         }
-    
+
     t0 = time.time()
-    
+
     # 1. L\u1ea5y Vector Embedding cho query
     query_vector = get_query_embedding(query)
-    
+
     # 2. Vector Search (Semantic) - Native-like Math Fallback cho Local Mongo
     try:
         # Thử VectorSearch trước
-        vector_results = list(docs_col.aggregate([
-            {
-                "$vectorSearch": {
-                    "index": settings.VECTOR_INDEX_NAME,
-                    "path": "embedding",
-                    "queryVector": query_vector,
-                    "numCandidates": top_k * 10,
-                    "limit": top_k * 2,
-                }
-            },
-            {
-                "$project": {
-                    "_id": 0, "content": 1, "metadata": 1, 
-                    "vector_score": {"$meta": "vectorSearchScore"}
-                }
-            }
-        ]))
+        vector_results = list(
+            docs_col.aggregate(
+                [
+                    {
+                        "$vectorSearch": {
+                            "index": settings.VECTOR_INDEX_NAME,
+                            "path": "embedding",
+                            "queryVector": query_vector,
+                            "numCandidates": top_k * 10,
+                            "limit": top_k * 2,
+                        }
+                    },
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "content": 1,
+                            "metadata": 1,
+                            "vector_score": {"$meta": "vectorSearchScore"},
+                        }
+                    },
+                ]
+            )
+        )
     except Exception:
         # NATIVE MATH FALLBACK: Tính Cosine Similarity bằng Aggregation Pipeline (Work trên mọi bản Mongo Local)
         # Score = Sum(Q_i * D_i) / (Norm(Q) * Norm(D))
         # Vì Norm(Q) là hằng số với 1 query nên có thể bỏ qua để tối ưu.
-        
+
         # Tạo biểu thức $multiply cho top 768 dims (Nặng nhưng Native)
         # Để tối ưu, ta chỉ lấy top 100 docs bằng Keyword hoặc Filter trước, hoặc scan hết nếu dataset nhỏ.
-        
-        dot_product_expr = { "$sum": [ { "$multiply": [ {"$arrayElemAt": ["$embedding", i]}, query_vector[i] ] } for i in range(len(query_vector)) ] }
-        
-        vector_results = list(docs_col.aggregate([
-            {
-                "$project": {
-                    "_id": 0, "content": 1, "metadata": 1,
-                    "vector_score": dot_product_expr
-                }
-            },
-            { "$sort": { "vector_score": -1 } },
-            { "$limit": top_k * 2 }
-        ]))
+
+        dot_product_expr = {
+            "$sum": [
+                {"$multiply": [{"$arrayElemAt": ["$embedding", i]}, query_vector[i]]}
+                for i in range(len(query_vector))
+            ]
+        }
+
+        vector_results = list(
+            docs_col.aggregate(
+                [
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "content": 1,
+                            "metadata": 1,
+                            "vector_score": dot_product_expr,
+                        }
+                    },
+                    {"$sort": {"vector_score": -1}},
+                    {"$limit": top_k * 2},
+                ]
+            )
+        )
 
     # 3. Keyword Search (Full-text) d\u00f9ng $text index
-    keyword_results = list(docs_col.find(
-        {"$text": {"$search": query}},
-        {"_id": 0, "content": 1, "metadata": 1, "score": {"$meta": "textScore"}}
-    ).sort([("score", {"$meta": "textScore"})]).limit(top_k * 2))
+    keyword_results = list(
+        docs_col.find(
+            {"$text": {"$search": query}},
+            {"_id": 0, "content": 1, "metadata": 1, "score": {"$meta": "textScore"}},
+        )
+        .sort([("score", {"$meta": "textScore"})])
+        .limit(top_k * 2)
+    )
 
-    # 4. Reciprocal Rank Fusion (RRF) 
+    # 4. Reciprocal Rank Fusion (RRF)
     # Thu\u1eadt to\u00e1n h\u1ee3p nh\u1ea5t k\u1ebft qu\u1ea3 chuy\u00ean nghi\u1ec7p
     k_const = 60
-    rrf_scores = {} # doc_id -> score
-    docs_map = {}   # doc_id -> content/metadata
-    
+    rrf_scores = {}  # doc_id -> score
+    docs_map = {}  # doc_id -> content/metadata
+
     # X\u1ebfp h\u1ea1ng t\u1eeb Vector
     for rank, doc in enumerate(vector_results, 1):
         doc_id = doc["metadata"].get("doc_id")
@@ -362,39 +403,47 @@ def search_vectors(query: str, top_k: int = None) -> dict:
             docs_map[doc_id]["source_type"] = "hybrid"
 
     # S\u1eafp h\u1ea1ng l\u1ea1i v\u00e0 l\u1ea5y Top K
-    sorted_doc_ids = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)[:top_k]
-    
+    sorted_doc_ids = sorted(
+        rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True
+    )[:top_k]
+
     elapsed_ms = round((time.time() - t0) * 1000, 1)
-    
+
     results = []
     for doc_id in sorted_doc_ids:
         r = docs_map[doc_id]
-        results.append({
-            "doc_id": doc_id,
-            "content": r.get("content", ""),
-            "content_preview": r.get("content", "")[:200],
-            "source": r.get("metadata", {}).get("source", ""),
-            "file_name": r.get("metadata", {}).get("file_name", ""),
-            "page_num": r.get("metadata", {}).get("page_num", 1),
-            "chunk_index": r.get("metadata", {}).get("chunk_index", 0),
-            "score": round(rrf_scores[doc_id], 6),
-            "search_type": r.get("source_type", "unknown")
-        })
-    
+        results.append(
+            {
+                "doc_id": doc_id,
+                "content": r.get("content", ""),
+                "content_preview": r.get("content", "")[:200],
+                "source": r.get("metadata", {}).get("source", ""),
+                "file_name": r.get("metadata", {}).get("file_name", ""),
+                "page_num": r.get("metadata", {}).get("page_num", 1),
+                "chunk_index": r.get("metadata", {}).get("chunk_index", 0),
+                "score": round(rrf_scores[doc_id], 6),
+                "search_type": r.get("source_type", "unknown"),
+            }
+        )
+
     # L\u01b0u v\u00e0o cache
-    cache_col.insert_one({
-        "query_hash": query_hash,
-        "query": query,
-        "query_vector": query_vector,
-        "top_k": top_k,
-        "results": results,
-        "search_time_ms": elapsed_ms,
-        "created_at": datetime.now(timezone.utc),
-    })
-    
-    logger.info(f"\ud83d\udd0d Hybrid Search '{query[:40]}': {len(results)} results in {elapsed_ms}ms (RRF)")
+    cache_col.insert_one(
+        {
+            "query_hash": query_hash,
+            "query": query,
+            "query_vector": query_vector,
+            "top_k": top_k,
+            "results": results,
+            "search_time_ms": elapsed_ms,
+            "created_at": datetime.now(timezone.utc),
+        }
+    )
+
+    logger.info(
+        f"\ud83d\udd0d Hybrid Search '{query[:40]}': {len(results)} results in {elapsed_ms}ms (RRF)"
+    )
     client.close()
-    
+
     return {
         "query_vector": query_vector,
         "results": results,
@@ -434,16 +483,20 @@ def build_context_from_results(results: list[dict]) -> str:
         source = r.get("source", "unknown")
         page = r.get("page_num", "?")
         score = r.get("score", 0)
-        
+
         # Cat noi dung neu vuot qua gioi han
         content = r.get("content", "").strip()
         if len(content) > MAX_CONTEXT_CHARS:
             content = content[:MAX_CONTEXT_CHARS] + "..."
-            
-        parts.append(f"[{i}] Nguon: {source} (trang {page}, score: {score:.3f})\n{content}")
-        
+
+        parts.append(
+            f"[{i}] Nguon: {source} (trang {page}, score: {score:.3f})\n{content}"
+        )
+
     context_str = "\n\n".join(parts)
-    logger.info(f"Context built: {len(results)} sources, {len(context_str)} characters.")
+    logger.info(
+        f"Context built: {len(results)} sources, {len(context_str)} characters."
+    )
     return context_str
 
 
@@ -458,20 +511,22 @@ def rag_chat(query: str, history: list[dict] = None) -> dict:
     # 1. Vector search (với cache)
     search_result = search_vectors(query)
     results = search_result["results"]
-    
+
     if not results:
         return {
             "answer": "Tôi chưa tìm được thông tin liên quan trong cơ sở dữ liệu hiện có. Vui lòng upload thêm tài liệu.",
             "sources": [],
-            "query_vector": search_result["query_vector"][:10],  # Chỉ trả 10 dims đầu để demo
+            "query_vector": search_result["query_vector"][
+                :10
+            ],  # Chỉ trả 10 dims đầu để demo
             "query_vector_dim": len(search_result["query_vector"]),
             "search_time_ms": search_result["search_time_ms"],
             "cached": search_result["cached"],
         }
-    
+
     # 2. Build context
     context = build_context_from_results(results)
-    
+
     # 3. Build history string
     history_str = ""
     if history:
@@ -480,23 +535,27 @@ def rag_chat(query: str, history: list[dict] = None) -> dict:
             f"{'Người dùng' if m['role'] == 'user' else 'Bot'}: {m['content']}"
             for m in recent
         )
-    
+
     # 4. Gọi LLM qua LangChain LCEL
     llm = get_llm()
     prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
-    
+
     chain = prompt | llm | StrOutputParser()
-    
-    answer = chain.invoke({
-        "context": context,
-        "history": history_str or "Chưa có lịch sử hội thoại.",
-        "question": query,
-    })
-    
+
+    answer = chain.invoke(
+        {
+            "context": context,
+            "history": history_str or "Chưa có lịch sử hội thoại.",
+            "question": query,
+        }
+    )
+
     return {
         "answer": answer.strip(),
         "sources": results,
-        "query_vector": search_result["query_vector"][:10],  # 10 dims đầu để hiển thị UI
+        "query_vector": search_result["query_vector"][
+            :10
+        ],  # 10 dims đầu để hiển thị UI
         "query_vector_dim": len(search_result["query_vector"]),
         "search_time_ms": search_result["search_time_ms"],
         "cached": search_result["cached"],

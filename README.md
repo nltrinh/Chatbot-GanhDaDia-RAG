@@ -1,77 +1,88 @@
-# 🪨 Chatbot Gành Đá Đĩa - Local RAG System
+<br />
+<div align="center">
+  <img src="https://raw.githubusercontent.com/nltrinh/Chatbot-GanhDaDia-RAG/main/app/static/logo.png" alt="Logo" width="120" onerror="this.src='https://cdn-icons-png.flaticon.com/512/4712/4712038.png'">
+  <h1 align="center">🪨 Chatbot Gành Đá Đĩa RAG</h1>
+  <p align="center">
+    <strong>Hệ thống Trí tuệ Nhân tạo thông minh, giải đáp thông tin về Quần thể danh thắng Quốc gia Đặc biệt Gành Đá Đĩa (Phú Yên)</strong>
+    <br />
+    <br />
+    <a href="#-tính-năng-cốt-lõi">Tính năng</a>
+    ·
+    <a href="#-kiến-trúc-hệ-thống">Kiến trúc</a>
+    ·
+    <a href="#-triển-khai-nhanh-quick-start">Triển Khai Mẫu</a>
+  </p>
+  
+  [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg?logo=python&logoColor=white)](https://python.org)
+  [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+  [![MongoDB](https://img.shields.io/badge/MongoDB-8.0-47A248.svg?logo=mongodb&logoColor=white)](https://mongodb.com)
+  [![Ollama](https://img.shields.io/badge/AI_Engine-Ollama-white.svg?logo=ollama&logoColor=black)](https://ollama.com)
+  [![LangChain](https://img.shields.io/badge/Framework-LangChain_0.3-orange.svg)](https://langchain.com)
+</div>
 
-Hệ thống Chatbot thông minh hỗ trợ tìm kiếm và giải đáp thông tin về danh thắng **Gành Đá Đĩa (Phú Yên)**, sử dụng kiến trúc **RAG (Retrieval-Augmented Generation)** chạy hoàn toàn local.
+## 🌟 Tính Năng Cốt Lõi
 
-## 🌟 Tính năng
-- **Local RAG:** Không phụ thuộc vào API bên thứ ba, đảm bảo quyền riêng tư và tốc độ.
-- **Vector Search:** Sử dụng MongoDB Atlas Local để tìm kiếm ngữ nghĩa chính xác.
-- **LLM:** Tích hợp Llama 3.2 (via Ollama) để sinh câu trả lời tự nhiên bằng tiếng Việt.
-- **Context-Aware:** Ghi nhớ lịch sử hội thoại để trả lời theo ngữ cảnh.
-- **Cấu hình linh hoạt:** Quản lý qua biến môi trường (.env).
+- **100% Khép Kín (Local-First):** Hệ thống được xây dựng để không phụ thuộc vào bất kỳ API nào bên ngoài (như OpenAI, Anthropic,...). Đảm bảo bảo vệ dữ liệu nội quyền (`Privacy-first`) và zero-cost execution (Không mất tiền inference).
+- **RAG Nâng Cao (Hybrid Search):** Thay vì chỉ match text thông thường, dự án cài đặt cơ chế lai ghép **Reciprocal Rank Fusion (RRF)**. Kết hợp sức mạnh của **Native MQL Vector Dot-Product** trên không gian 768 chiều và **BM25 Keyword Search** của hạt nhân MongoDB 8.
+- **LLM Thời Gian Thực:** Trang bị mô hình não Llama 3.2 1B hoạt động cực mượt nhờ nền tảng nội suy Ollama.
+- **Automated AI Deployment:** Đóng gói thông minh dưới dạng *Agent Config* - một AI Agent có thể đọc mã và tự động setup Cloud Server từ máy trắng sang Trạng thái Ready để Demo.
 
-## 🏗️ Kiến trúc hệ thống
-Hệ thống bao gồm các thành phần chính:
-1. **FastAPI Backend:** Xử lý yêu cầu và điều phối luồng RAG.
-2. **MongoDB Atlas Local:** Lưu trữ văn bản và thực hiện Vector Search.
-3. **Ollama:** Cung cấp Embeddings (`nomic-embed-text`) và LLM (`llama3.2`).
+## 🏗️ Kiến Trúc Khung
 
-```mermaid
-graph TD
-    User((Người dùng)) --> API[FastAPI]
-    API --> Retriever[Vector Search]
-    Retriever --> DB[(MongoDB Local)]
-    API --> LLM[Ollama: Llama 3.2]
-    API --> History[Chat History]
+Dự án bao gồm 4 thành phần trụ cột:
+1. **Application Server (FastAPI):** Orchestrator điều phối API, Web UI, tiếp nhận Files và xử lý các luồng Streaming cho Client.
+2. **Knowledge Base (MongoDB 8 local):** Trung tâm cơ sở lưu trữ dữ liệu văn bản linh hoạt và hệ Vector Search phi cấu trúc.
+3. **Inference Neural Engine (Ollama):** Trạm phát API nội bộ cấp quyền truy xuất hai model:
+   - `nomic-embed-text`: Tokenizer chuyển hóa chữ văn tự sang toạ độ không gian.
+   - `llama3.2:1b`: Core LLM hiểu tiếng Việt để giao tiếp.
+4. **LangChain 0.3 Framework:** Công nghệ mắc nối lõi bằng chuẩn `LCEL` (LangChain Expression Language).
+
+## 🚀 Triển Khai Nhanh (Quick Start)
+
+Dự án này đã loại bỏ hoàn toàn Docker để tối ưu tối đa hiệu năng GPU/CPU thô của máy chủ. Nó có thể chạy trực tiếp trên Server Ubuntu trắng (như Vast.ai, Runpod, AWS EC2,...).
+
+### Phương Pháp 1: Dùng Môi Giới Trí Tuệ Nhân Tạo (Khuyên dùng)
+Nếu bạn đang sử dụng VSCode (hoặc Cursor) có tích hợp AI Agent trên server, chỉ việc mở Terminal tại file `AGENT_AUTO_DEPLOY.md` và ra lệnh: 
+> *"Agent, hãy thực thi toàn bộ script trong AGENT_AUTO_DEPLOY.md."*
+
+Cỗ máy AI sẽ tự động thay bạn cài cắm toàn bộ Mongo, Ollama, Python Dependencies và khởi động Web Server thành công!
+
+### Phương Pháp 2: Chạy Bằng Tay (Manual Deploy)
+
+**Bước 1: Cấu hình Cơ Sở Dữ Liệu (MongoDB 8)**
+Khởi động cấu trúc Replica Set (bắt buộc đối với Native Vector):
+```bash
+mongod --port 27017 --dbpath ~/data/db --replSet rs0 --fork --logpath ~/data/mongod.log
+mongosh --eval 'rs.initiate()'
 ```
 
-## 🚀 Hướng dẫn cài đặt
-
-### 1. Yêu cầu hệ thống
-- Docker & Docker Desktop.
-- Ollama (tải tại [ollama.com](https://ollama.com)).
-- Python 3.11.
-
-### 2. Thiết lập môi trường
-Tạo môi trường ảo và cài đặt thư viện:
+**Bước 2: Cấu hình Trí tuệ (Ollama)**
 ```bash
-python -m venv test_env
-source test_env/Scripts/activate  # (hoặc test_env/bin/activate trên Linux)
-pip install -r requirements.txt
-```
-
-### 3. Khởi động Database (Docker)
-```bash
-docker-compose up -d
-```
-
-### 4. Chuẩn bị Mô hình AI (Ollama)
-```bash
-ollama pull llama3.2
 ollama pull nomic-embed-text
+ollama pull llama3.2:1b
 ```
 
-### 5. Nạp dữ liệu (Ingestion)
-Không cần chạy script tay. Truy cập trực tiếp vào `http://localhost:8000/admin/ui` sau khi chạy server để upload file trực quan. Hệ thống sẽ tự động chunking và lưu vector.
-
-## 💻 Sử dụng
-
-### Khởi động API Server
+**Bước 3: Biên Dịch Backend**
 ```bash
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+mongosh ganh_da_dia_bot --eval 'db.documents.createIndex({content: "text"})'
 ```
 
-### API Endpoints
-- **POST `/chat`**: Gửi câu hỏi và nhận câu trả lời.
-  ```json
-  {
-    "message": "Gành Đá Đĩa ở đâu?"
-  }
-  ```
-- **GET `/docs`**: Tài liệu API tương tác (Swagger UI).
+**Bước 4: Bật Trạm Phát và Tải Tri Thức Ban Đầu**
+```bash
+# Start Server FastAPI Backend
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 
-## 🛡️ Bảo mật
-Dự án đã được tối ưu hóa để không lộ thông tin nhạy cảm. Toàn bộ cấu hình được quản lý qua file `.env` (không đẩy lên GitHub). Hãy sử dụng file `env.example` làm mẫu.
+# Mở Terminal khác để nhúng File Tri thức (Tự Tách Chunk & Cấy Vector)
+curl -X POST -F "file=@ganh_da_dia_text.txt" http://localhost:8000/admin/upload
+```
+
+🌍 Mọi thứ đã hoàn tất, mời bạn truy cập:
+- **Giao diện trải nghiệm Chat:** `http://localhost:8000/`
+- **Trung tâm quản trị (Swagger API):** `http://localhost:8000/docs`
 
 ---
-**Author:** nltrinh  
-**Project:** Chatbot-GanhDaDia-RAG
+> Xin trân trọng giới thiệu, cống hiến cho công cuộc số hoá di sản Gành Đá Đĩa Việt Nam.
+> **Developed by: nltrinh**
