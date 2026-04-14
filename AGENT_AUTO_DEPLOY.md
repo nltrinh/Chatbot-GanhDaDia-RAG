@@ -2,12 +2,18 @@
 
 > **🗣 LƯU Ý DÀNH CHO BẠN (CÁCH SỬ DỤNG FILE NÀY):**
 > Mỗi khi thuê một máy chủ hoàn toàn mới (VD trên Vast.ai/VPS Trắng), bạn chỉ cần gõ 1 lệnh duy nhất này vào terminal để kéo bộ mã nguồn về máy:
+> 
 > ```bash
+> # Nếu Repo là Công khai (Public):
 > git clone https://github.com/nltrinh/Chatbot-GanhDaDia-RAG.git && cd Chatbot-GanhDaDia-RAG
+> 
+> # Nếu Repo là Riêng tư (Private), hãy sử dụng Token (PAT), LƯU Ý không lưu lệnh chứa Token vào script cố định để tránh rò rỉ:
+> git clone https://<YOUR_GITHUB_TOKEN>@github.com/nltrinh/Chatbot-GanhDaDia-RAG.git && cd Chatbot-GanhDaDia-RAG
 > ```
+> 
 > Tiếp theo, hãy mở IDE (VSCode / Cursor) có tích hợp AI Agent, mở file này lên và copy/paste dòng thoại dưới đây cho AI của bạn:
 > ---
-> **"Chào Agent, bạn hãy đóng vai là một kỹ sư AI/Backend. Tôi vừa mới thuê một máy chủ ảo mới (Linux/Ubuntu trên Vast.ai). Nhiệm vụ của bạn là đọc hiểu toàn bộ file `AGENT_AUTO_DEPLOY.md` này và thực thi tuần tự, cẩn thận tất cả các bước bên dưới để đưa dự án Chatbot RAG của tôi khởi chạy thành công 100% (Ready to Demo). Hãy sử dụng các công cụ bạn có (run_command, view_file, replace_file_content) để hoàn thành mọi việc, tôi chỉ việc ngồi xem bạn thao tác."**
+> **"Chào Agent, bạn hãy đóng vai là một kỹ sư AI/Backend. Tôi vừa mới thuê một máy chủ ảo mới (Linux/Ubuntu). Nhiệm vụ của bạn là đọc hiểu toàn bộ file `AGENT_AUTO_DEPLOY.md` này và thực thi tuần tự, cẩn thận tất cả các bước bên dưới để hệ thống Chatbot RAG khởi chạy thành công 100%. Mọi thông tin nhạy cảm đã được loại bỏ khỏi repo, cứ tự động thay đổi biến môi trường nếu cần thiết. Hãy sử dụng các công cụ bạn có (run_command, view_file) để hoàn thành mọi việc, tôi chỉ việc ngồi xem bạn thao tác."**
 > ---
 
 ---
