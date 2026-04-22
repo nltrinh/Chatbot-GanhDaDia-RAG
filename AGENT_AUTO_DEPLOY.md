@@ -10,7 +10,7 @@
 > 
 > Tiếp theo, hãy mở IDE (VSCode / Cursor) có tích hợp AI Agent, mở file này lên và copy/paste dòng thoại dưới đây cho AI của bạn:
 > ---
-> **"Chào Agent, bạn hãy đóng vai là một kỹ sư Backend & AI Expert. Tôi vừa mới kết nối vào một máy chủ mới. Nhiệm vụ của bạn là đọc hiểu file `AGENT_AUTO_DEPLOY.md` này để nắm bắt kiến trúc hiện tại ĐÃ ĐƯỢC CỐ ĐỊNH (Qwen2.5 14B, MongoDB 8, BGE-M3) và thực thi tất cả các bước để đưa hệ thống Chatbot RAG Gành Đá Đĩa lên trạng thái chạy ổn định (Ready to Demo). Hãy cài đặt dependencies, cấu hình ENV và khởi động server với 4 workers. Lưu ý: Luôn sử dụng mô hình Qwen2.5:14b bất kể cấu hình máy như thế nào."**
+> **"Chào Agent, bạn hãy đóng vai là một kỹ sư Backend & AI Expert. Tôi vừa mới kết nối vào một máy chủ mới. Nhiệm vụ của bạn là đọc hiểu file `AGENT_AUTO_DEPLOY.md` này để nắm bắt kiến trúc hiện tại ĐÃ ĐƯỢC CỐ ĐỊNH (Qwen2.5 14B, MongoDB 8, BGE-M3) và thực thi tất cả các bước để đưa hệ thống Chatbot RAG Gành Đá Đĩa lên trạng thái chạy ổn định (Ready to Demo). Hãy cài đặt dependencies, chạy hệ thống và test kết quả phản hồi,cấu hình ENV và khởi động server với 4 workers. Lưu ý: Luôn sử dụng mô hình Qwen2.5:14b bất kể cấu hình máy như thế nào."**
 > ---
 
 ---
